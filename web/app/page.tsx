@@ -345,7 +345,7 @@ export default function Home() {
           <div>
             <h2 style={{ ...sectionTitle, margin: 0 }}>4. 텍스트 변형</h2>
             <p style={{ margin: '4px 0 0', fontSize: 12, color: '#888' }}>
-              {textRows.length}개 행 × {templatePreviews.length}개 템플릿 =&nbsp;
+              {textRows.length}개 텍스트 버전 × {selectedLayouts.length}개 사이즈{selectedMarkets.length > 1 ? ` × ${selectedMarkets.length}개 시장` : ''} =&nbsp;
               <strong style={{ color: '#18A0FB' }}>총 {totalCount}개 소재</strong>
             </p>
           </div>
