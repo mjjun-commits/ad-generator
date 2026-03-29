@@ -46,6 +46,7 @@ export default function Home() {
   const [jsonOutput, setJsonOutput] = useState('')
   const [savedCampaigns, setSavedCampaigns] = useState<Campaign[]>([])
   const [showHistory, setShowHistory] = useState(false)
+  const [autoImages, setAutoImages] = useState(false)
 
   useEffect(() => {
     loadHistory()
@@ -105,7 +106,7 @@ export default function Home() {
     }
   }
 
-  const buildJson = (rows: VariantRow[], camp: string) => {
+  const buildJson = (rows: VariantRow[], camp: string, ai = autoImages) => {
     const json = {
       campaign: camp || 'campaign',
       variants: rows.map(v => ({
@@ -117,6 +118,7 @@ export default function Home() {
           'cta-text': v.ctaText,
         },
         bg_color: v.bgColor,
+        ...(ai ? { auto_images: true } : {}),
       })),
     }
     setJsonOutput(JSON.stringify(json, null, 2))
@@ -308,9 +310,42 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Image Options */}
+      <section style={sectionStyle}>
+        <h2 style={sectionTitle}>2. 이미지 설정</h2>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+          <div
+            onClick={() => {
+              const next = !autoImages
+              setAutoImages(next)
+              if (variants.length > 0) buildJson(variants, campaign, next)
+            }}
+            style={{
+              width: 44, height: 24, borderRadius: 12,
+              background: autoImages ? '#18A0FB' : '#ccc',
+              position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            <div style={{
+              width: 18, height: 18, borderRadius: '50%', background: '#fff',
+              position: 'absolute', top: 3,
+              left: autoImages ? 23 : 3,
+              transition: 'left 0.2s',
+            }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>이미지 자동 매핑 (auto_images)</div>
+            <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
+              켜면 JSON에 <code style={{ background: '#f0f0f0', padding: '1px 4px', borderRadius: 3 }}>&quot;auto_images&quot;: true</code> 추가됨 —
+              Figma 플러그인에서 이미지 파일을 thumb 레이어에 순서대로 자동 매핑
+            </div>
+          </div>
+        </label>
+      </section>
+
       {/* Brief */}
       <section style={sectionStyle}>
-        <h2 style={sectionTitle}>2. 광고 브리프</h2>
+        <h2 style={sectionTitle}>3. 광고 브리프</h2>
         <textarea
           style={{ ...inputStyle, height: 100, resize: 'vertical', fontFamily: 'inherit' }}
           value={brief}
@@ -340,7 +375,7 @@ export default function Home() {
       {/* Variant Table */}
       <section style={sectionStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ ...sectionTitle, margin: 0 }}>3. Variants 편집</h2>
+          <h2 style={{ ...sectionTitle, margin: 0 }}>4. Variants 편집</h2>
           <button onClick={addRow} style={{ ...chipStyle, background: '#f0f0f0' }}>+ 행 추가</button>
         </div>
 
@@ -395,7 +430,7 @@ export default function Home() {
       {jsonOutput && (
         <section style={sectionStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h2 style={{ ...sectionTitle, margin: 0 }}>4. JSON 출력</h2>
+            <h2 style={{ ...sectionTitle, margin: 0 }}>5. JSON 출력</h2>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={handleSave}
