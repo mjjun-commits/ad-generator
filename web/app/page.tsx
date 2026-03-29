@@ -6,10 +6,9 @@ import { supabase, Campaign } from '@/lib/supabase'
 type Market = 'JP' | 'US' | 'BR'
 type Layout = 'vs_sq' | 'vs_16x9' | 'vs_9x16'
 
-interface VariantRow {
-  id: string
-  market: Market
-  template: string
+// 텍스트 행 — 템플릿과 분리
+interface TextRow {
+  label: string      // 버전명 (예: "버전 A")
   mainText: string
   subText: string
   ctaText: string
@@ -17,16 +16,14 @@ interface VariantRow {
 }
 
 const MARKETS: Market[] = ['JP', 'US', 'BR']
-const LAYOUTS: { value: Layout; label: string }[] = [
-  { value: 'vs_sq', label: 'Square (1:1)' },
-  { value: 'vs_16x9', label: 'Landscape (16:9)' },
-  { value: 'vs_9x16', label: 'Portrait (9:16)' },
+const LAYOUTS: { value: Layout; label: string; short: string }[] = [
+  { value: 'vs_sq',   label: 'Square (1:1)',    short: 'sq'   },
+  { value: 'vs_16x9', label: 'Landscape (16:9)', short: '16x9' },
+  { value: 'vs_9x16', label: 'Portrait (9:16)',  short: '9x16' },
 ]
 
-const DEFAULT_ROW = (market: Market, index: number): VariantRow => ({
-  id: `${market}_variant_${String(index + 1).padStart(3, '0')}`,
-  market,
-  template: `${market}_vs_sq_BASE`,
+const DEFAULT_TEXT_ROW = (index: number): TextRow => ({
+  label: `버전 ${String.fromCharCode(65 + index)}`,
   mainText: '',
   subText: '',
   ctaText: '',
@@ -37,9 +34,9 @@ export default function Home() {
   const [campaign, setCampaign] = useState('')
   const [brief, setBrief] = useState('')
   const [selectedMarkets, setSelectedMarkets] = useState<Market[]>(['JP'])
-  const [selectedLayout, setSelectedLayout] = useState<Layout>('vs_sq')
+  const [selectedLayouts, setSelectedLayouts] = useState<Layout[]>(['vs_sq'])
   const [templateSuffix, setTemplateSuffix] = useState('BASE')
-  const [variants, setVariants] = useState<VariantRow[]>([])
+  const [textRows, setTextRows] = useState<TextRow[]>([DEFAULT_TEXT_ROW(0)])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -48,9 +45,10 @@ export default function Home() {
   const [showHistory, setShowHistory] = useState(false)
   const [autoImages, setAutoImages] = useState(false)
 
-  useEffect(() => {
-    loadHistory()
-  }, [])
+  // 생성될 소재 수 계산
+  const totalCount = selectedMarkets.length * selectedLayouts.length * textRows.length
+
+  useEffect(() => { loadHistory() }, [])
 
   const loadHistory = async () => {
     const { data } = await supabase
@@ -61,44 +59,83 @@ export default function Home() {
     if (data) setSavedCampaigns(data)
   }
 
-  const updateTemplate = (layout: Layout, suffix: string) => {
-    setVariants(prev => prev.map(v => ({
-      ...v,
-      template: `${v.market}_${layout}_${suffix}`,
-    })))
-  }
-
-  const handleLayoutChange = (layout: Layout) => {
-    setSelectedLayout(layout)
-    updateTemplate(layout, templateSuffix)
-  }
-
-  const handleSuffixChange = (suffix: string) => {
-    setTemplateSuffix(suffix)
-    updateTemplate(selectedLayout, suffix)
+  // 레이아웃 토글 (다중 선택)
+  const handleLayoutToggle = (layout: Layout) => {
+    setSelectedLayouts(prev =>
+      prev.includes(layout)
+        ? prev.length > 1 ? prev.filter(l => l !== layout) : prev  // 최소 1개 유지
+        : [...prev, layout]
+    )
   }
 
   const handleMarketToggle = (market: Market) => {
     setSelectedMarkets(prev =>
-      prev.includes(market) ? prev.filter(m => m !== market) : [...prev, market]
+      prev.includes(market)
+        ? prev.length > 1 ? prev.filter(m => m !== market) : prev
+        : [...prev, market]
     )
   }
 
+  // 크로스 프로덕트로 JSON 생성: market × layout × textRow
+  const buildJson = (rows: TextRow[], camp: string, ai = autoImages, markets = selectedMarkets, layouts = selectedLayouts, suffix = templateSuffix) => {
+    const variants: object[] = []
+    let idx = 1
+    for (const market of markets) {
+      for (const layout of layouts) {
+        const layoutShort = LAYOUTS.find(l => l.value === layout)?.short || layout
+        for (const row of rows) {
+          variants.push({
+            id: `${market}_${layoutShort}_${String(idx).padStart(3, '0')}`,
+            template: `${market}_${layout}_${suffix}`,
+            texts: {
+              'main-text': row.mainText,
+              'sub-text': row.subText,
+              'cta-text': row.ctaText,
+            },
+            bg_color: row.bgColor,
+            ...(ai ? { auto_images: true } : {}),
+          })
+          idx++
+        }
+      }
+    }
+    const json = { campaign: camp || 'campaign', variants }
+    setJsonOutput(JSON.stringify(json, null, 2))
+    return json
+  }
+
+  // Claude로 텍스트 자동 생성
   const handleGenerate = async () => {
     if (!brief.trim()) { setError('광고 브리프를 입력해주세요'); return }
-    if (selectedMarkets.length === 0) { setError('시장을 하나 이상 선택해주세요'); return }
+    if (selectedMarkets.length === 0) { setError('시장을 선택해주세요'); return }
     setLoading(true)
     setError('')
     try {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brief, markets: selectedMarkets, layout: selectedLayout, templateSuffix }),
+        body: JSON.stringify({
+          brief,
+          markets: selectedMarkets,
+          layout: selectedLayouts[0],
+          templateSuffix,
+          variantCount: textRows.length,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || '생성 실패')
-      setVariants(data.variants)
-      buildJson(data.variants, campaign)
+      // Claude 응답을 textRow 형식으로 변환 (시장별로 첫 번째 시장 기준)
+      const newRows: TextRow[] = data.variants
+        .filter((v: { market: string }) => v.market === selectedMarkets[0])
+        .map((v: { mainText: string; subText: string; ctaText: string; bgColor: string }, i: number) => ({
+          label: `버전 ${String.fromCharCode(65 + i)}`,
+          mainText: v.mainText,
+          subText: v.subText,
+          ctaText: v.ctaText,
+          bgColor: v.bgColor || '#4A90D9',
+        }))
+      setTextRows(newRows)
+      buildJson(newRows, campaign)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -106,62 +143,36 @@ export default function Home() {
     }
   }
 
-  const buildJson = (rows: VariantRow[], camp: string, ai = autoImages) => {
-    const json = {
-      campaign: camp || 'campaign',
-      variants: rows.map(v => ({
-        id: v.id,
-        template: v.template,
-        texts: {
-          'main-text': v.mainText,
-          'sub-text': v.subText,
-          'cta-text': v.ctaText,
-        },
-        bg_color: v.bgColor,
-        ...(ai ? { auto_images: true } : {}),
-      })),
-    }
-    setJsonOutput(JSON.stringify(json, null, 2))
-    return json
-  }
-
-  const handleRowChange = (index: number, field: keyof VariantRow, value: string) => {
-    const updated = variants.map((v, i) => i === index ? { ...v, [field]: value } : v)
-    setVariants(updated)
+  const handleRowChange = (index: number, field: keyof TextRow, value: string) => {
+    const updated = textRows.map((r, i) => i === index ? { ...r, [field]: value } : r)
+    setTextRows(updated)
     buildJson(updated, campaign)
   }
 
   const addRow = () => {
-    const market = selectedMarkets[0] || 'JP'
-    const newRow = DEFAULT_ROW(market as Market, variants.length)
-    newRow.template = `${market}_${selectedLayout}_${templateSuffix}`
-    const updated = [...variants, newRow]
-    setVariants(updated)
+    const updated = [...textRows, DEFAULT_TEXT_ROW(textRows.length)]
+    setTextRows(updated)
     buildJson(updated, campaign)
   }
 
   const removeRow = (index: number) => {
-    const updated = variants.filter((_, i) => i !== index)
-    setVariants(updated)
+    if (textRows.length <= 1) return
+    const updated = textRows.filter((_, i) => i !== index)
+    setTextRows(updated)
     buildJson(updated, campaign)
   }
 
   const handleSave = async () => {
-    if (!variants.length) { setError('저장할 variant가 없습니다'); return }
     setSaving(true)
     setError('')
-    const json = buildJson(variants, campaign)
+    const json = buildJson(textRows, campaign)
     const { error: saveError } = await supabase.from('campaigns').insert({
       name: campaign || '이름 없음',
       brief: brief || null,
       variants: json,
     })
-    if (saveError) {
-      setError('저장 실패: ' + saveError.message)
-    } else {
-      await loadHistory()
-      setShowHistory(true)
-    }
+    if (saveError) setError('저장 실패: ' + saveError.message)
+    else { await loadHistory(); setShowHistory(true) }
     setSaving(false)
   }
 
@@ -173,16 +184,6 @@ export default function Home() {
     }> }
     setCampaign(data.campaign || c.name)
     setBrief(c.brief || '')
-    const rows: VariantRow[] = data.variants.map(v => ({
-      id: v.id,
-      market: (v.id.split('_')[0] as Market) || 'JP',
-      template: v.template,
-      mainText: v.texts?.['main-text'] || '',
-      subText: v.texts?.['sub-text'] || '',
-      ctaText: v.texts?.['cta-text'] || '',
-      bgColor: v.bg_color || '#4A90D9',
-    }))
-    setVariants(rows)
     setJsonOutput(JSON.stringify(data, null, 2))
     setShowHistory(false)
   }
@@ -199,15 +200,29 @@ export default function Home() {
 
   const handleCampaignChange = (val: string) => {
     setCampaign(val)
-    if (variants.length > 0) buildJson(variants, val)
+    buildJson(textRows, val)
+  }
+
+  const handleSuffixChange = (val: string) => {
+    setTemplateSuffix(val)
+    buildJson(textRows, campaign, autoImages, selectedMarkets, selectedLayouts, val)
+  }
+
+  // 선택된 템플릿 목록 미리보기
+  const templatePreviews: string[] = []
+  for (const market of selectedMarkets) {
+    for (const layout of selectedLayouts) {
+      templatePreviews.push(`${market}_${layout}_${templateSuffix}`)
+    }
   }
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
+    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 16px' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Ad Generator</h1>
-          <p style={{ color: '#888', margin: 0, fontSize: 13 }}>브리프 입력 → Claude가 카피 생성 → variants.json 다운로드</p>
+          <p style={{ color: '#888', margin: 0, fontSize: 13 }}>템플릿 × 텍스트 행 크로스 프로덕트 → variants.json</p>
         </div>
         <button
           onClick={() => setShowHistory(!showHistory)}
@@ -217,7 +232,7 @@ export default function Home() {
         </button>
       </div>
 
-      {/* History Panel */}
+      {/* History */}
       {showHistory && (
         <section style={{ ...sectionStyle, marginBottom: 16 }}>
           <h2 style={sectionTitle}>저장된 캠페인</h2>
@@ -234,10 +249,7 @@ export default function Home() {
                       {c.brief ? ` · ${c.brief.slice(0, 40)}...` : ''}
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleLoadCampaign(c)}
-                    style={{ ...chipStyle, background: '#fff', border: '1px solid #ddd', fontSize: 12 }}
-                  >
+                  <button onClick={() => handleLoadCampaign(c)} style={{ ...chipStyle, background: '#fff', border: '1px solid #ddd', fontSize: 12 }}>
                     불러오기
                   </button>
                 </div>
@@ -247,271 +259,215 @@ export default function Home() {
         </section>
       )}
 
-      {/* Campaign & Settings */}
+      {/* 1. 캠페인 설정 */}
       <section style={sectionStyle}>
         <h2 style={sectionTitle}>1. 캠페인 설정</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
           <label style={labelStyle}>
             캠페인 이름
-            <input
-              style={inputStyle}
-              value={campaign}
-              onChange={e => handleCampaignChange(e.target.value)}
-              placeholder="예: template_jp_mar2026"
-            />
+            <input style={inputStyle} value={campaign} onChange={e => handleCampaignChange(e.target.value)} placeholder="예: template_jp_mar2026" />
           </label>
           <label style={labelStyle}>
             템플릿 접미사 (Figma 프레임명)
-            <input
-              style={inputStyle}
-              value={templateSuffix}
-              onChange={e => handleSuffixChange(e.target.value)}
-              placeholder="예: BASE, BASE_edu, BASE_ver3"
-            />
+            <input style={inputStyle} value={templateSuffix} onChange={e => handleSuffixChange(e.target.value)} placeholder="예: BASE, BASE_edu, BASE_ver3" />
           </label>
         </div>
 
-        <div style={{ marginTop: 16 }}>
-          <div style={labelStyle}>시장 선택</div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-            {MARKETS.map(m => (
-              <button
-                key={m}
-                onClick={() => handleMarketToggle(m)}
-                style={{
-                  ...chipStyle,
-                  background: selectedMarkets.includes(m) ? '#18A0FB' : '#f0f0f0',
-                  color: selectedMarkets.includes(m) ? '#fff' : '#333',
-                }}
-              >
-                {m}
-              </button>
-            ))}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <div>
+            <div style={labelStyle}>시장 선택 (복수 선택)</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+              {MARKETS.map(m => (
+                <button key={m} onClick={() => handleMarketToggle(m)} style={{ ...chipStyle, background: selectedMarkets.includes(m) ? '#18A0FB' : '#f0f0f0', color: selectedMarkets.includes(m) ? '#fff' : '#333' }}>
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={labelStyle}>레이아웃 (복수 선택)</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+              {LAYOUTS.map(l => (
+                <button key={l.value} onClick={() => handleLayoutToggle(l.value)} style={{ ...chipStyle, background: selectedLayouts.includes(l.value) ? '#18A0FB' : '#f0f0f0', color: selectedLayouts.includes(l.value) ? '#fff' : '#333' }}>
+                  {l.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div style={{ marginTop: 16 }}>
-          <div style={labelStyle}>레이아웃</div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-            {LAYOUTS.map(l => (
-              <button
-                key={l.value}
-                onClick={() => handleLayoutChange(l.value)}
-                style={{
-                  ...chipStyle,
-                  background: selectedLayout === l.value ? '#18A0FB' : '#f0f0f0',
-                  color: selectedLayout === l.value ? '#fff' : '#333',
-                }}
-              >
-                {l.label}
-              </button>
-            ))}
-          </div>
+        {/* 템플릿 미리보기 */}
+        <div style={{ marginTop: 16, padding: '10px 14px', background: '#f0f7ff', borderRadius: 6, fontSize: 12 }}>
+          <span style={{ color: '#555', fontWeight: 600 }}>생성될 Figma 템플릿: </span>
+          {templatePreviews.map((t, i) => (
+            <span key={i} style={{ display: 'inline-block', background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: 4, margin: '2px 4px 2px 0', fontFamily: 'monospace' }}>{t}</span>
+          ))}
         </div>
       </section>
 
-      {/* Image Options */}
+      {/* 2. 이미지 설정 */}
       <section style={sectionStyle}>
         <h2 style={sectionTitle}>2. 이미지 설정</h2>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
           <div
-            onClick={() => {
-              const next = !autoImages
-              setAutoImages(next)
-              if (variants.length > 0) buildJson(variants, campaign, next)
-            }}
-            style={{
-              width: 44, height: 24, borderRadius: 12,
-              background: autoImages ? '#18A0FB' : '#ccc',
-              position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0,
-            }}
+            onClick={() => { const next = !autoImages; setAutoImages(next); buildJson(textRows, campaign, next) }}
+            style={{ width: 44, height: 24, borderRadius: 12, background: autoImages ? '#18A0FB' : '#ccc', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}
           >
-            <div style={{
-              width: 18, height: 18, borderRadius: '50%', background: '#fff',
-              position: 'absolute', top: 3,
-              left: autoImages ? 23 : 3,
-              transition: 'left 0.2s',
-            }} />
+            <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: autoImages ? 23 : 3, transition: 'left 0.2s' }} />
           </div>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600 }}>이미지 자동 매핑 (auto_images)</div>
             <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
-              켜면 JSON에 <code style={{ background: '#f0f0f0', padding: '1px 4px', borderRadius: 3 }}>&quot;auto_images&quot;: true</code> 추가됨 —
-              Figma 플러그인에서 이미지 파일을 thumb 레이어에 순서대로 자동 매핑
+              켜면 Figma 플러그인에서 업로드 이미지를 thumb 레이어에 순서대로 자동 매핑
             </div>
           </div>
         </label>
       </section>
 
-      {/* Brief */}
+      {/* 3. 광고 브리프 */}
       <section style={sectionStyle}>
-        <h2 style={sectionTitle}>3. 광고 브리프</h2>
+        <h2 style={sectionTitle}>3. 광고 브리프 (선택사항)</h2>
         <textarea
-          style={{ ...inputStyle, height: 100, resize: 'vertical', fontFamily: 'inherit' }}
+          style={{ ...inputStyle, height: 80, resize: 'vertical', fontFamily: 'inherit' }}
           value={brief}
           onChange={e => setBrief(e.target.value)}
-          placeholder="예: 미리캔버스 템플릿 기능 홍보. 타깃: 중소기업 마케터. 톤: 친근하고 명확하게. 핵심 메시지: 템플릿으로 작업 효율 향상"
+          placeholder="예: 미리캔버스 IR 덱 템플릿 홍보. 타깃: 중소기업 마케터. 핵심 메시지: 10분 만에 완성"
         />
         <button
           onClick={handleGenerate}
           disabled={loading}
-          style={{
-            marginTop: 12,
-            padding: '10px 24px',
-            background: loading ? '#ccc' : '#18A0FB',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 6,
-            fontSize: 14,
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontWeight: 600,
-          }}
+          style={{ marginTop: 10, padding: '9px 20px', background: loading ? '#ccc' : '#6366f1', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 600 }}
         >
           {loading ? 'Claude가 카피 생성 중...' : 'AI 카피 자동 생성'}
         </button>
         {error && <p style={{ color: '#c62828', marginTop: 8, fontSize: 13 }}>{error}</p>}
       </section>
 
-      {/* Variant Table */}
+      {/* 4. 텍스트 변형 행 */}
       <section style={sectionStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ ...sectionTitle, margin: 0 }}>4. Variants 편집</h2>
+          <div>
+            <h2 style={{ ...sectionTitle, margin: 0 }}>4. 텍스트 변형</h2>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#888' }}>
+              {textRows.length}개 행 × {templatePreviews.length}개 템플릿 =&nbsp;
+              <strong style={{ color: '#18A0FB' }}>총 {totalCount}개 소재</strong>
+            </p>
+          </div>
           <button onClick={addRow} style={{ ...chipStyle, background: '#f0f0f0' }}>+ 행 추가</button>
         </div>
 
-        {variants.length === 0 ? (
-          <p style={{ color: '#aaa', fontSize: 13 }}>AI 생성 후 여기서 편집할 수 있습니다</p>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: '#f5f5f5' }}>
-                  {['ID', '템플릿', 'Main Text', 'Sub Text', 'CTA', '배경색', ''].map(h => (
-                    <th key={h} style={thStyle}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {variants.map((v, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-                    <td style={tdStyle}>
-                      <input style={cellInput} value={v.id} onChange={e => handleRowChange(i, 'id', e.target.value)} />
-                    </td>
-                    <td style={tdStyle}>
-                      <input style={cellInput} value={v.template} onChange={e => handleRowChange(i, 'template', e.target.value)} />
-                    </td>
-                    <td style={tdStyle}>
-                      <input style={cellInput} value={v.mainText} onChange={e => handleRowChange(i, 'mainText', e.target.value)} />
-                    </td>
-                    <td style={tdStyle}>
-                      <input style={cellInput} value={v.subText} onChange={e => handleRowChange(i, 'subText', e.target.value)} />
-                    </td>
-                    <td style={tdStyle}>
-                      <input style={cellInput} value={v.ctaText} onChange={e => handleRowChange(i, 'ctaText', e.target.value)} />
-                    </td>
-                    <td style={tdStyle}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <input type="color" value={v.bgColor} onChange={e => handleRowChange(i, 'bgColor', e.target.value)} style={{ width: 32, height: 28, border: 'none', cursor: 'pointer' }} />
-                        <input style={{ ...cellInput, width: 80 }} value={v.bgColor} onChange={e => handleRowChange(i, 'bgColor', e.target.value)} />
-                      </div>
-                    </td>
-                    <td style={tdStyle}>
-                      <button onClick={() => removeRow(i)} style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer', fontSize: 16 }}>✕</button>
-                    </td>
-                  </tr>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#f5f5f5' }}>
+                {['버전', 'Main Text', 'Sub Text', 'CTA', '배경색', ''].map(h => (
+                  <th key={h} style={thStyle}>{h}</th>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              </tr>
+            </thead>
+            <tbody>
+              {textRows.map((row, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
+                  <td style={tdStyle}>
+                    <input style={{ ...cellInput, width: 70, fontWeight: 600 }} value={row.label} onChange={e => handleRowChange(i, 'label', e.target.value)} />
+                  </td>
+                  <td style={tdStyle}>
+                    <input style={cellInput} value={row.mainText} onChange={e => handleRowChange(i, 'mainText', e.target.value)} placeholder="메인 카피" />
+                  </td>
+                  <td style={tdStyle}>
+                    <input style={cellInput} value={row.subText} onChange={e => handleRowChange(i, 'subText', e.target.value)} placeholder="서브 카피" />
+                  </td>
+                  <td style={tdStyle}>
+                    <input style={{ ...cellInput, width: 100 }} value={row.ctaText} onChange={e => handleRowChange(i, 'ctaText', e.target.value)} placeholder="CTA" />
+                  </td>
+                  <td style={tdStyle}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input type="color" value={row.bgColor} onChange={e => handleRowChange(i, 'bgColor', e.target.value)} style={{ width: 32, height: 28, border: 'none', cursor: 'pointer', borderRadius: 4 }} />
+                      <input style={{ ...cellInput, width: 76 }} value={row.bgColor} onChange={e => handleRowChange(i, 'bgColor', e.target.value)} />
+                    </div>
+                  </td>
+                  <td style={tdStyle}>
+                    <button onClick={() => removeRow(i)} style={{ background: 'none', border: 'none', color: '#bbb', cursor: 'pointer', fontSize: 16 }} disabled={textRows.length <= 1}>✕</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* 크로스 프로덕트 미리보기 */}
+        <div style={{ marginTop: 14, padding: '10px 14px', background: '#f9f9f9', borderRadius: 6, fontSize: 12, color: '#666' }}>
+          <strong>생성 예시:</strong>
+          {selectedMarkets.slice(0, 1).flatMap(market =>
+            selectedLayouts.slice(0, 2).flatMap((layout, li) =>
+              textRows.slice(0, 2).map((row, ri) => {
+                const layoutShort = LAYOUTS.find(l => l.value === layout)?.short || layout
+                const idx = li * textRows.length + ri + 1
+                return (
+                  <span key={`${market}-${layout}-${ri}`} style={{ display: 'inline-block', margin: '2px 4px 2px 0', background: '#fff', border: '1px solid #e0e0e0', padding: '2px 8px', borderRadius: 4, fontFamily: 'monospace' }}>
+                    {market}_{layoutShort}_{String(idx).padStart(3, '0')} → {market}_{layout}_{templateSuffix}
+                  </span>
+                )
+              })
+            )
+          )}
+          {totalCount > 4 && <span style={{ color: '#aaa' }}> ... 외 {totalCount - 4}개</span>}
+        </div>
       </section>
 
-      {/* JSON Output */}
+      {/* 5. JSON 출력 */}
       {jsonOutput && (
         <section style={sectionStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h2 style={{ ...sectionTitle, margin: 0 }}>5. JSON 출력</h2>
+            <h2 style={{ ...sectionTitle, margin: 0 }}>5. JSON 출력 <span style={{ fontSize: 13, color: '#888', fontWeight: 400 }}>({totalCount}개 소재)</span></h2>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                style={{ padding: '8px 20px', background: saving ? '#ccc' : '#34a853', color: '#fff', border: 'none', borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13 }}
-              >
+              <button onClick={handleSave} disabled={saving} style={{ padding: '8px 18px', background: saving ? '#ccc' : '#34a853', color: '#fff', border: 'none', borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13 }}>
                 {saving ? '저장 중...' : '저장'}
               </button>
-              <button
-                onClick={handleDownload}
-                style={{ padding: '8px 20px', background: '#18A0FB', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
-              >
+              <button onClick={handleDownload} style={{ padding: '8px 18px', background: '#18A0FB', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
                 JSON 다운로드
               </button>
             </div>
           </div>
-          <pre style={{ background: '#1e1e1e', color: '#d4d4d4', padding: 16, borderRadius: 6, overflow: 'auto', fontSize: 12, maxHeight: 400 }}>
+          <pre style={{ background: '#1e1e1e', color: '#d4d4d4', padding: 16, borderRadius: 6, overflow: 'auto', fontSize: 12, maxHeight: 400, margin: 0 }}>
             {jsonOutput}
           </pre>
         </section>
+      )}
+
+      {/* JSON 미리보기 없을 때 생성 버튼 */}
+      {!jsonOutput && textRows.some(r => r.mainText) && (
+        <div style={{ textAlign: 'center', padding: 16 }}>
+          <button onClick={() => buildJson(textRows, campaign)} style={{ padding: '10px 32px', background: '#18A0FB', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+            JSON 생성 ({totalCount}개 소재)
+          </button>
+        </div>
       )}
     </div>
   )
 }
 
 const sectionStyle: React.CSSProperties = {
-  background: '#fff',
-  borderRadius: 8,
-  padding: 24,
-  marginBottom: 16,
-  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+  background: '#fff', borderRadius: 8, padding: 24, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
 }
 const sectionTitle: React.CSSProperties = {
-  fontSize: 15,
-  fontWeight: 600,
-  marginBottom: 16,
-  marginTop: 0,
+  fontSize: 15, fontWeight: 600, marginBottom: 16, marginTop: 0,
 }
 const labelStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  fontSize: 13,
-  color: '#555',
-  fontWeight: 500,
+  display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#555', fontWeight: 500,
 }
 const inputStyle: React.CSSProperties = {
-  padding: '8px 10px',
-  border: '1px solid #ddd',
-  borderRadius: 6,
-  fontSize: 13,
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
+  padding: '8px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box',
 }
 const chipStyle: React.CSSProperties = {
-  padding: '6px 16px',
-  border: 'none',
-  borderRadius: 20,
-  cursor: 'pointer',
-  fontSize: 13,
-  fontWeight: 500,
+  padding: '6px 16px', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 13, fontWeight: 500,
 }
 const thStyle: React.CSSProperties = {
-  padding: '8px 12px',
-  textAlign: 'left',
-  fontWeight: 600,
-  fontSize: 12,
-  color: '#555',
-  whiteSpace: 'nowrap',
+  padding: '8px 12px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: '#555', whiteSpace: 'nowrap',
 }
 const tdStyle: React.CSSProperties = {
-  padding: '6px 8px',
-  verticalAlign: 'middle',
+  padding: '6px 8px', verticalAlign: 'middle',
 }
 const cellInput: React.CSSProperties = {
-  padding: '4px 6px',
-  border: '1px solid #ddd',
-  borderRadius: 4,
-  fontSize: 12,
-  width: '100%',
-  minWidth: 100,
-  boxSizing: 'border-box',
+  padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12, width: '100%', minWidth: 100, boxSizing: 'border-box',
 }
