@@ -262,10 +262,12 @@ export default function Home() {
           <label style={labelStyle}>
             캠페인 이름
             <input style={inputStyle} value={campaign} onChange={e => handleCampaignChange(e.target.value)} placeholder="예: template_jp_mar2026" />
+            <span style={hintStyle}>다운로드되는 JSON 파일명이 됩니다. 날짜나 주제로 구분하면 편해요.<br />예: <code style={codeStyle}>ir_deck_jp_apr2026</code></span>
           </label>
           <label style={labelStyle}>
-            템플릿 접미사 (Figma 프레임명)
+            템플릿 접미사
             <input style={inputStyle} value={templateSuffix} onChange={e => handleSuffixChange(e.target.value)} placeholder="예: BASE, BASE_edu, BASE_ver3" />
+            <span style={hintStyle}>Figma에서 템플릿 프레임 이름의 맨 끝 부분입니다.<br />프레임명이 <code style={codeStyle}>JP_vs_sq_BASE_edu</code>라면 → <code style={codeStyle}>BASE_edu</code></span>
           </label>
         </div>
 
@@ -344,6 +346,7 @@ export default function Home() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div>
             <h2 style={{ ...sectionTitle, margin: 0 }}>4. 텍스트 변형</h2>
+            <p style={{ margin: '3px 0 0', fontSize: 12, color: '#aaa' }}>버전명은 내부 구분용 — JSON에는 포함되지 않아요</p>
             <p style={{ margin: '4px 0 0', fontSize: 12, color: '#888' }}>
               {textRows.length}개 텍스트 버전 × {selectedLayouts.length}개 사이즈{selectedMarkets.length > 1 ? ` × ${selectedMarkets.length}개 시장` : ''} =&nbsp;
               <strong style={{ color: '#18A0FB' }}>총 {totalCount}개 소재</strong>
@@ -466,4 +469,10 @@ const tdStyle: React.CSSProperties = {
 }
 const cellInput: React.CSSProperties = {
   padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12, width: '100%', minWidth: 100, boxSizing: 'border-box',
+}
+const hintStyle: React.CSSProperties = {
+  fontSize: 11, color: '#999', lineHeight: 1.5, fontWeight: 400,
+}
+const codeStyle: React.CSSProperties = {
+  background: '#f0f0f0', padding: '1px 5px', borderRadius: 3, fontFamily: 'monospace', fontSize: 11, color: '#555',
 }
