@@ -62,17 +62,13 @@ export default function Home() {
   // 레이아웃 토글 (다중 선택)
   const handleLayoutToggle = (layout: Layout) => {
     setSelectedLayouts(prev =>
-      prev.includes(layout)
-        ? prev.length > 1 ? prev.filter(l => l !== layout) : prev  // 최소 1개 유지
-        : [...prev, layout]
+      prev.includes(layout) ? prev.filter(l => l !== layout) : [...prev, layout]
     )
   }
 
   const handleMarketToggle = (market: Market) => {
     setSelectedMarkets(prev =>
-      prev.includes(market)
-        ? prev.length > 1 ? prev.filter(m => m !== market) : prev
-        : [...prev, market]
+      prev.includes(market) ? prev.filter(m => m !== market) : [...prev, market]
     )
   }
 
