@@ -283,14 +283,37 @@ export default function Home() {
             </div>
           </div>
           <div>
-            <div style={labelStyle}>레이아웃 (복수 선택)</div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+            <div style={labelStyle}>레이아웃 (복수 선택 + 직접 입력 가능)</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
               {LAYOUTS.map(l => (
                 <button key={l.value} onClick={() => handleLayoutToggle(l.value)} style={{ ...chipStyle, background: selectedLayouts.includes(l.value) ? '#18A0FB' : '#f0f0f0', color: selectedLayouts.includes(l.value) ? '#fff' : '#333' }}>
                   {l.label}
                 </button>
               ))}
+              {/* 커스텀 레이아웃 태그 */}
+              {selectedLayouts.filter(l => !LAYOUTS.find(p => p.value === l)).map(l => (
+                <span key={l} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#e0f2fe', color: '#0369a1', padding: '5px 10px', borderRadius: 20, fontSize: 13, fontWeight: 500 }}>
+                  {l}
+                  <button onClick={() => handleLayoutToggle(l)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0369a1', padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+                </span>
+              ))}
+              {/* 직접 입력 */}
+              <form onSubmit={e => {
+                e.preventDefault()
+                const input = (e.currentTarget.elements.namedItem('custom') as HTMLInputElement)
+                const val = input.value.trim()
+                if (val && !selectedLayouts.includes(val as Layout)) {
+                  setSelectedLayouts(prev => [...prev, val as Layout])
+                }
+                input.value = ''
+              }} style={{ display: 'flex', gap: 4 }}>
+                <input name="custom" style={{ padding: '5px 8px', border: '1px dashed #ccc', borderRadius: 20, fontSize: 12, width: 100, outline: 'none' }} placeholder="직접 입력" />
+                <button type="submit" style={{ ...chipStyle, padding: '5px 10px', background: '#f0f0f0', fontSize: 12 }}>+</button>
+              </form>
             </div>
+            <span style={{ ...hintStyle, marginTop: 4, display: 'block' }}>
+              Figma 프레임명 중간 부분. <code style={codeStyle}>US_editor_sq_BASE</code>면 → <code style={codeStyle}>editor_sq</code> 직접 입력
+            </span>
           </div>
         </div>
 
