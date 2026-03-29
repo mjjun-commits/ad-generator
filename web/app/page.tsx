@@ -267,7 +267,7 @@ export default function Home() {
           <label style={labelStyle}>
             템플릿 접미사
             <input style={inputStyle} value={templateSuffix} onChange={e => handleSuffixChange(e.target.value)} placeholder="예: BASE, BASE_edu, BASE_ver3" />
-            <span style={hintStyle}>Figma에서 템플릿 프레임 이름의 맨 끝 부분입니다.<br />프레임명이 <code style={codeStyle}>JP_vs_sq_BASE_edu</code>라면 → <code style={codeStyle}>BASE_edu</code></span>
+            <span style={hintStyle}>Figma에 이미 있는 템플릿 프레임 이름의 끝 부분입니다.<br />플러그인이 <code style={codeStyle}>JP_vs_sq_[접미사]</code> 프레임을 찾아 복제합니다.<br />Figma 프레임명이 <code style={codeStyle}>JP_vs_sq_BASE_edu</code>면 → <code style={codeStyle}>BASE_edu</code> 입력</span>
           </label>
         </div>
 
