@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase, Campaign } from '@/lib/supabase'
 
 type Market = 'JP' | 'US' | 'BR'
 type Layout = 'vs_sq' | 'vs_16x9' | 'vs_9x16'
@@ -40,8 +41,24 @@ export default function Home() {
   const [templateSuffix, setTemplateSuffix] = useState('BASE')
   const [variants, setVariants] = useState<VariantRow[]>([])
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [jsonOutput, setJsonOutput] = useState('')
+  const [savedCampaigns, setSavedCampaigns] = useState<Campaign[]>([])
+  const [showHistory, setShowHistory] = useState(false)
+
+  useEffect(() => {
+    loadHistory()
+  }, [])
+
+  const loadHistory = async () => {
+    const { data } = await supabase
+      .from('campaigns')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(20)
+    if (data) setSavedCampaigns(data)
+  }
 
   const updateTemplate = (layout: Layout, suffix: string) => {
     setVariants(prev => prev.map(v => ({
@@ -80,7 +97,7 @@ export default function Home() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || '생성 실패')
       setVariants(data.variants)
-      buildJson(data.variants, campaign || 'campaign')
+      buildJson(data.variants, campaign)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -103,6 +120,7 @@ export default function Home() {
       })),
     }
     setJsonOutput(JSON.stringify(json, null, 2))
+    return json
   }
 
   const handleRowChange = (index: number, field: keyof VariantRow, value: string) => {
@@ -126,6 +144,47 @@ export default function Home() {
     buildJson(updated, campaign)
   }
 
+  const handleSave = async () => {
+    if (!variants.length) { setError('저장할 variant가 없습니다'); return }
+    setSaving(true)
+    setError('')
+    const json = buildJson(variants, campaign)
+    const { error: saveError } = await supabase.from('campaigns').insert({
+      name: campaign || '이름 없음',
+      brief: brief || null,
+      variants: json,
+    })
+    if (saveError) {
+      setError('저장 실패: ' + saveError.message)
+    } else {
+      await loadHistory()
+      setShowHistory(true)
+    }
+    setSaving(false)
+  }
+
+  const handleLoadCampaign = (c: Campaign) => {
+    const data = c.variants as { campaign: string; variants: Array<{
+      id: string; template: string;
+      texts: { 'main-text': string; 'sub-text': string; 'cta-text': string };
+      bg_color: string;
+    }> }
+    setCampaign(data.campaign || c.name)
+    setBrief(c.brief || '')
+    const rows: VariantRow[] = data.variants.map(v => ({
+      id: v.id,
+      market: (v.id.split('_')[0] as Market) || 'JP',
+      template: v.template,
+      mainText: v.texts?.['main-text'] || '',
+      subText: v.texts?.['sub-text'] || '',
+      ctaText: v.texts?.['cta-text'] || '',
+      bgColor: v.bg_color || '#4A90D9',
+    }))
+    setVariants(rows)
+    setJsonOutput(JSON.stringify(data, null, 2))
+    setShowHistory(false)
+  }
+
   const handleDownload = () => {
     const blob = new Blob([jsonOutput], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -143,10 +202,48 @@ export default function Home() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 16px' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Ad Generator</h1>
-      <p style={{ color: '#888', marginBottom: 32, fontSize: 13 }}>
-        브리프 입력 → Claude가 카피 생성 → variants.json 다운로드
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Ad Generator</h1>
+          <p style={{ color: '#888', margin: 0, fontSize: 13 }}>브리프 입력 → Claude가 카피 생성 → variants.json 다운로드</p>
+        </div>
+        <button
+          onClick={() => setShowHistory(!showHistory)}
+          style={{ ...chipStyle, background: showHistory ? '#18A0FB' : '#f0f0f0', color: showHistory ? '#fff' : '#333' }}
+        >
+          히스토리 {savedCampaigns.length > 0 ? `(${savedCampaigns.length})` : ''}
+        </button>
+      </div>
+
+      {/* History Panel */}
+      {showHistory && (
+        <section style={{ ...sectionStyle, marginBottom: 16 }}>
+          <h2 style={sectionTitle}>저장된 캠페인</h2>
+          {savedCampaigns.length === 0 ? (
+            <p style={{ color: '#aaa', fontSize: 13 }}>저장된 캠페인 없음</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {savedCampaigns.map(c => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#f9f9f9', borderRadius: 6 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</div>
+                    <div style={{ color: '#888', fontSize: 11, marginTop: 2 }}>
+                      {new Date(c.created_at).toLocaleString('ko-KR')}
+                      {c.brief ? ` · ${c.brief.slice(0, 40)}...` : ''}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleLoadCampaign(c)}
+                    style={{ ...chipStyle, background: '#fff', border: '1px solid #ddd', fontSize: 12 }}
+                  >
+                    불러오기
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Campaign & Settings */}
       <section style={sectionStyle}>
@@ -299,12 +396,21 @@ export default function Home() {
         <section style={sectionStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h2 style={{ ...sectionTitle, margin: 0 }}>4. JSON 출력</h2>
-            <button
-              onClick={handleDownload}
-              style={{ padding: '8px 20px', background: '#18A0FB', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
-            >
-              JSON 다운로드
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                style={{ padding: '8px 20px', background: saving ? '#ccc' : '#34a853', color: '#fff', border: 'none', borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13 }}
+              >
+                {saving ? '저장 중...' : '저장'}
+              </button>
+              <button
+                onClick={handleDownload}
+                style={{ padding: '8px 20px', background: '#18A0FB', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+              >
+                JSON 다운로드
+              </button>
+            </div>
           </div>
           <pre style={{ background: '#1e1e1e', color: '#d4d4d4', padding: 16, borderRadius: 6, overflow: 'auto', fontSize: 12, maxHeight: 400 }}>
             {jsonOutput}
@@ -315,7 +421,6 @@ export default function Home() {
   )
 }
 
-// Styles
 const sectionStyle: React.CSSProperties = {
   background: '#fff',
   borderRadius: 8,
