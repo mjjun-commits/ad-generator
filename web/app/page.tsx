@@ -11,6 +11,12 @@ interface TextRow {
   bgColor: string
 }
 
+interface ScanFrame {
+  frame: string
+  textLayers: string[]
+  selected: boolean
+}
+
 const DEFAULT_TEXT_ROW = (index: number): TextRow => ({
   label: `버전 ${String.fromCharCode(65 + index)}`,
   mainText: '',
@@ -31,13 +37,30 @@ export default function Home() {
   const [savedCampaigns, setSavedCampaigns] = useState<Campaign[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [autoImages, setAutoImages] = useState(false)
-  // 실제 Figma 레이어명 (기본값은 일반적인 이름, 템플릿마다 다를 수 있음)
   const [layerMain, setLayerMain] = useState('main-text')
   const [layerSub, setLayerSub] = useState('sub-text')
   const [layerCta, setLayerCta] = useState('cta-text')
 
-  const validFrames = frameNames.filter(f => f.trim() !== '')
+  // Scan mode state
+  const [scanJson, setScanJson] = useState('')
+  const [scanFrames, setScanFrames] = useState<ScanFrame[]>([])
+  const [scanMode, setScanMode] = useState(false)
+  const [scanError, setScanError] = useState('')
+
+  const validFrames = scanMode
+    ? scanFrames.filter(f => f.selected).map(f => f.frame)
+    : frameNames.filter(f => f.trim() !== '')
   const totalCount = validFrames.length * textRows.length
+
+  // All unique layers across selected (or all) scan frames
+  const scanLayerOptions = (() => {
+    if (!scanMode || scanFrames.length === 0) return []
+    const selected = scanFrames.filter(f => f.selected)
+    const src = selected.length > 0 ? selected : scanFrames
+    const seen = new Set<string>()
+    src.forEach(f => f.textLayers.forEach(l => seen.add(l)))
+    return Array.from(seen)
+  })()
 
   useEffect(() => { loadHistory() }, [])
 
@@ -50,7 +73,6 @@ export default function Home() {
     if (data) setSavedCampaigns(data)
   }
 
-  // 크로스 프로덕트: 프레임 × 텍스트 행
   const buildJson = (
     rows: TextRow[], camp: string, frames = validFrames, ai = autoImages,
     lMain = layerMain, lSub = layerSub, lCta = layerCta
@@ -76,6 +98,66 @@ export default function Home() {
     const json = { campaign: camp || 'campaign', variants }
     setJsonOutput(JSON.stringify(json, null, 2))
     return json
+  }
+
+  // Parse scan JSON pasted by user
+  const handleScanPaste = (raw: string) => {
+    setScanJson(raw)
+    setScanError('')
+    if (!raw.trim()) {
+      setScanFrames([])
+      return
+    }
+    try {
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) throw new Error('배열 형식이어야 합니다')
+      const frames: ScanFrame[] = parsed.map((item: { frame: string; textLayers: string[] }) => ({
+        frame: item.frame,
+        textLayers: item.textLayers || [],
+        selected: true,
+      }))
+      setScanFrames(frames)
+      setScanMode(true)
+
+      // Auto-detect layer names from first frame
+      if (frames.length > 0) {
+        const allLayers = frames[0].textLayers
+        // Try to auto-match common patterns
+        const guessMain = allLayers.find(l => /main|headline|title|제목/i.test(l)) || allLayers[0] || ''
+        const guessSub = allLayers.find(l => /sub|body|description|설명/i.test(l)) || allLayers[1] || ''
+        const guessCta = allLayers.find(l => /cta|button|버튼/i.test(l)) || allLayers[2] || ''
+        if (guessMain) setLayerMain(guessMain)
+        if (guessSub) setLayerSub(guessSub)
+        if (guessCta) setLayerCta(guessCta)
+        // Rebuild JSON with new frames and auto-detected layers
+        const newFrames = frames.filter(f => f.selected).map(f => f.frame)
+        buildJson(textRows, campaign, newFrames, autoImages, guessMain, guessSub, guessCta)
+      }
+    } catch (e) {
+      setScanError('파싱 오류: ' + String(e))
+      setScanFrames([])
+    }
+  }
+
+  const toggleScanFrame = (index: number) => {
+    const updated = scanFrames.map((f, i) => i === index ? { ...f, selected: !f.selected } : f)
+    setScanFrames(updated)
+    const newFrames = updated.filter(f => f.selected).map(f => f.frame)
+    buildJson(textRows, campaign, newFrames)
+  }
+
+  const selectAllScanFrames = (val: boolean) => {
+    const updated = scanFrames.map(f => ({ ...f, selected: val }))
+    setScanFrames(updated)
+    const newFrames = updated.filter(f => f.selected).map(f => f.frame)
+    buildJson(textRows, campaign, newFrames)
+  }
+
+  const exitScanMode = () => {
+    setScanMode(false)
+    setScanJson('')
+    setScanFrames([])
+    setScanError('')
   }
 
   const handleFrameChange = (index: number, value: string) => {
@@ -222,33 +304,111 @@ export default function Home() {
         <p style={hintStyle}>다운로드되는 JSON 파일명이 됩니다.</p>
       </section>
 
-      {/* 2. Figma 프레임 이름 */}
+      {/* 2. 프레임 선택 */}
       <section style={sectionStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
           <div>
-            <h2 style={{ ...sectionTitle, margin: 0 }}>2. Figma 템플릿 프레임 이름</h2>
-            <p style={hintStyle}>Figma에서 복제할 프레임 이름을 그대로 붙여넣으세요. 여러 개 추가 가능합니다.</p>
+            <h2 style={{ ...sectionTitle, margin: 0 }}>2. Figma 템플릿 프레임 선택</h2>
+            <p style={hintStyle}>스캔 결과를 붙여넣으면 프레임을 체크박스로 선택할 수 있습니다.</p>
           </div>
-          <button onClick={addFrame} style={{ ...chipStyle, background: '#f0f0f0', flexShrink: 0 }}>+ 추가</button>
+          {scanMode && (
+            <button onClick={exitScanMode} style={{ ...chipStyle, background: '#fee2e2', color: '#c62828', fontSize: 12 }}>
+              스캔 모드 해제
+            </button>
+          )}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {frameNames.map((name, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input
-                style={{ ...inputStyle, fontFamily: 'monospace', fontSize: 13 }}
-                value={name}
-                onChange={e => handleFrameChange(i, e.target.value)}
-                placeholder="예: JP_vs_sq_BASE_edu"
-              />
-              <button onClick={() => removeFrame(i)} style={{ background: 'none', border: 'none', color: '#bbb', cursor: 'pointer', fontSize: 18, flexShrink: 0 }}>✕</button>
+        {/* Scan paste area */}
+        {!scanMode && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#6366f1', marginBottom: 6 }}>
+              Figma 플러그인 스캔 결과 붙여넣기
             </div>
-          ))}
-        </div>
+            <textarea
+              style={{ ...inputStyle, height: 80, resize: 'vertical', fontFamily: 'monospace', fontSize: 11 }}
+              value={scanJson}
+              onChange={e => handleScanPaste(e.target.value)}
+              placeholder={'Figma 플러그인에서 "프레임 스캔" 버튼 클릭 후 복사된 JSON을 여기에 붙여넣으세요\n예: [{"frame":"JP_vs_sq_BASE","textLayers":["main-text","sub-text","cta-text"]}]'}
+            />
+            {scanError && <p style={{ color: '#c62828', fontSize: 11, marginTop: 4 }}>{scanError}</p>}
+            <div style={{ display: 'flex', alignItems: 'center', margin: '12px 0 8px' }}>
+              <div style={{ flex: 1, height: 1, background: '#eee' }} />
+              <span style={{ margin: '0 10px', fontSize: 11, color: '#bbb' }}>또는 직접 입력</span>
+              <div style={{ flex: 1, height: 1, background: '#eee' }} />
+            </div>
+          </div>
+        )}
+
+        {/* Scan mode: frame checkboxes */}
+        {scanMode && scanFrames.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>
+                프레임 선택 — {scanFrames.filter(f => f.selected).length}/{scanFrames.length}개 선택됨
+              </span>
+              <button onClick={() => selectAllScanFrames(true)} style={{ ...chipStyle, padding: '3px 10px', fontSize: 11, background: '#f0f0f0' }}>전체 선택</button>
+              <button onClick={() => selectAllScanFrames(false)} style={{ ...chipStyle, padding: '3px 10px', fontSize: 11, background: '#f0f0f0' }}>전체 해제</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflowY: 'auto', padding: '2px 0' }}>
+              {scanFrames.map((sf, i) => (
+                <label key={i} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer',
+                  padding: '8px 12px', borderRadius: 6,
+                  background: sf.selected ? '#f0f7ff' : '#fafafa',
+                  border: sf.selected ? '1px solid #bfdbfe' : '1px solid #eee',
+                  transition: 'all 0.1s',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={sf.selected}
+                    onChange={() => toggleScanFrame(i)}
+                    style={{ marginTop: 2, cursor: 'pointer', accentColor: '#18A0FB' }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: sf.selected ? '#1e40af' : '#666', wordBreak: 'break-all' }}>
+                      {sf.frame}
+                    </div>
+                    {sf.textLayers.length > 0 && (
+                      <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {sf.textLayers.map((layer, j) => (
+                          <span key={j} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, background: '#e5e7eb', color: '#374151', fontFamily: 'monospace' }}>
+                            {layer}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Manual frame input (shown when NOT in scan mode) */}
+        {!scanMode && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+              <button onClick={addFrame} style={{ ...chipStyle, background: '#f0f0f0' }}>+ 추가</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {frameNames.map((name, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    style={{ ...inputStyle, fontFamily: 'monospace', fontSize: 13 }}
+                    value={name}
+                    onChange={e => handleFrameChange(i, e.target.value)}
+                    placeholder="예: JP_vs_sq_BASE_edu"
+                  />
+                  <button onClick={() => removeFrame(i)} style={{ background: 'none', border: 'none', color: '#bbb', cursor: 'pointer', fontSize: 18, flexShrink: 0 }}>✕</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {validFrames.length > 0 && (
           <div style={{ marginTop: 12, padding: '8px 12px', background: '#f0f7ff', borderRadius: 6, fontSize: 12 }}>
-            <span style={{ color: '#555', fontWeight: 600 }}>찾을 프레임: </span>
+            <span style={{ color: '#555', fontWeight: 600 }}>선택된 프레임 {validFrames.length}개: </span>
             {validFrames.map((f, i) => (
               <span key={i} style={{ display: 'inline-block', background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: 4, margin: '2px 4px 2px 0', fontFamily: 'monospace' }}>{f}</span>
             ))}
@@ -282,7 +442,6 @@ export default function Home() {
               {validFrames.length}개 프레임 × {textRows.length}개 버전 =&nbsp;
               <strong style={{ color: '#18A0FB' }}>총 {totalCount}개 소재</strong>
             </p>
-            <p style={hintStyle}>버전명은 내부 구분용, JSON에는 포함되지 않습니다.</p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={handleGenerate} disabled={loading} style={{ ...chipStyle, background: loading ? '#ccc' : '#6366f1', color: '#fff' }}>
@@ -292,9 +451,7 @@ export default function Home() {
           </div>
         </div>
 
-        {brief !== '' || true ? null : null}
-
-        {/* 브리프 입력 (AI 생성용, 접혀있음) */}
+        {/* 브리프 입력 */}
         <div style={{ marginBottom: 12 }}>
           <textarea
             style={{ ...inputStyle, height: 60, resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }}
@@ -307,9 +464,72 @@ export default function Home() {
 
         {/* 레이어명 안내 */}
         <div style={{ marginBottom: 12, padding: '10px 14px', background: '#fffbeb', borderRadius: 6, fontSize: 12, color: '#78350f' }}>
-          <strong>Figma 레이어명 설정</strong> — 헤더를 실제 레이어명으로 수정하세요.
-          디버그 모드에서 확인한 이름을 그대로 입력하면 됩니다.
+          <strong>Figma 레이어명 설정</strong>
+          {scanMode && scanLayerOptions.length > 0 ? (
+            <span> — 스캔된 레이어명 중에서 클릭해서 선택하거나 직접 수정하세요.</span>
+          ) : (
+            <span> — 헤더를 실제 레이어명으로 수정하세요. 디버그 모드에서 확인한 이름을 그대로 입력하면 됩니다.</span>
+          )}
         </div>
+
+        {/* Layer name quick-select chips (scan mode only) */}
+        {scanMode && scanLayerOptions.length > 0 && (
+          <div style={{ marginBottom: 14, padding: '12px 14px', background: '#f8faff', border: '1px solid #e0e7ff', borderRadius: 6 }}>
+            <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: 8 }}>스캔된 레이어 — 클릭하면 해당 컬럼에 자동 입력</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              {(['main', 'sub', 'cta'] as const).map((col) => {
+                const label = col === 'main' ? 'Main 텍스트' : col === 'sub' ? 'Sub 텍스트' : 'CTA'
+                const current = col === 'main' ? layerMain : col === 'sub' ? layerSub : layerCta
+                const setter = col === 'main' ? setLayerMain : col === 'sub' ? setLayerSub : setLayerCta
+                return (
+                  <div key={col}>
+                    <div style={{ fontSize: 10, color: '#888', marginBottom: 4 }}>{label}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {scanLayerOptions.map((layer, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            setter(layer)
+                            const nm = col === 'main' ? layer : layerMain
+                            const ns = col === 'sub' ? layer : layerSub
+                            const nc = col === 'cta' ? layer : layerCta
+                            buildJson(textRows, campaign, validFrames, autoImages, nm, ns, nc)
+                          }}
+                          style={{
+                            padding: '2px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'monospace',
+                            border: current === layer ? '2px solid #6366f1' : '1px solid #ddd',
+                            background: current === layer ? '#e0e7ff' : '#fff',
+                            color: current === layer ? '#3730a3' : '#555',
+                            fontWeight: current === layer ? 700 : 400,
+                          }}
+                        >
+                          {layer}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => {
+                          setter('')
+                          const nm = col === 'main' ? '' : layerMain
+                          const ns = col === 'sub' ? '' : layerSub
+                          const nc = col === 'cta' ? '' : layerCta
+                          buildJson(textRows, campaign, validFrames, autoImages, nm, ns, nc)
+                        }}
+                        style={{
+                          padding: '2px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
+                          border: current === '' ? '2px solid #e11d48' : '1px solid #fecdd3',
+                          background: current === '' ? '#ffe4e6' : '#fff',
+                          color: '#e11d48',
+                        }}
+                      >
+                        없음
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -345,7 +565,7 @@ export default function Home() {
               </tr>
               <tr style={{ background: '#fafafa', borderBottom: '1px solid #eee' }}>
                 <td colSpan={6} style={{ padding: '2px 12px', fontSize: 11, color: '#aaa' }}>
-                  ↑ 헤더 클릭해서 실제 Figma 레이어명으로 수정
+                  {scanMode ? '↑ 위의 레이어 칩을 클릭하거나 헤더를 직접 수정' : '↑ 헤더 클릭해서 실제 Figma 레이어명으로 수정'}
                 </td>
               </tr>
             </thead>
@@ -356,13 +576,13 @@ export default function Home() {
                     <input style={{ ...cellInput, width: 70, fontWeight: 600 }} value={row.label} onChange={e => handleRowChange(i, 'label', e.target.value)} />
                   </td>
                   <td style={tdStyle}>
-                    <input style={cellInput} value={row.mainText} onChange={e => handleRowChange(i, 'mainText', e.target.value)} placeholder="메인 카피" />
+                    <input style={cellInput} value={row.mainText} onChange={e => handleRowChange(i, 'mainText', e.target.value)} placeholder={layerMain || '(비활성)'} disabled={!layerMain} />
                   </td>
                   <td style={tdStyle}>
-                    <input style={cellInput} value={row.subText} onChange={e => handleRowChange(i, 'subText', e.target.value)} placeholder="서브 카피" />
+                    <input style={cellInput} value={row.subText} onChange={e => handleRowChange(i, 'subText', e.target.value)} placeholder={layerSub || '(비활성)'} disabled={!layerSub} />
                   </td>
                   <td style={tdStyle}>
-                    <input style={{ ...cellInput, width: 100 }} value={row.ctaText} onChange={e => handleRowChange(i, 'ctaText', e.target.value)} placeholder="CTA" />
+                    <input style={{ ...cellInput, width: 100 }} value={row.ctaText} onChange={e => handleRowChange(i, 'ctaText', e.target.value)} placeholder={layerCta || '(비활성)'} disabled={!layerCta} />
                   </td>
                   <td style={tdStyle}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -400,7 +620,6 @@ export default function Home() {
         </section>
       )}
 
-      {/* JSON 없을 때 생성 버튼 */}
       {!jsonOutput && validFrames.length > 0 && textRows.some(r => r.mainText) && (
         <div style={{ textAlign: 'center', padding: 16 }}>
           <button onClick={() => buildJson(textRows, campaign)} style={{ padding: '10px 32px', background: '#18A0FB', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
