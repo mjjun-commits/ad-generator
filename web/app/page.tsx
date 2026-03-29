@@ -22,7 +22,7 @@ const DEFAULT_TEXT_ROW = (index: number): TextRow => ({
 export default function Home() {
   const [campaign, setCampaign] = useState('')
   const [brief, setBrief] = useState('')
-  const [frameNames, setFrameNames] = useState<string[]>([''])   // Figma 프레임 이름 목록
+  const [frameNames, setFrameNames] = useState<string[]>([''])
   const [textRows, setTextRows] = useState<TextRow[]>([DEFAULT_TEXT_ROW(0)])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -31,6 +31,10 @@ export default function Home() {
   const [savedCampaigns, setSavedCampaigns] = useState<Campaign[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [autoImages, setAutoImages] = useState(false)
+  // 실제 Figma 레이어명 (기본값은 일반적인 이름, 템플릿마다 다를 수 있음)
+  const [layerMain, setLayerMain] = useState('main-text')
+  const [layerSub, setLayerSub] = useState('sub-text')
+  const [layerCta, setLayerCta] = useState('cta-text')
 
   const validFrames = frameNames.filter(f => f.trim() !== '')
   const totalCount = validFrames.length * textRows.length
@@ -47,19 +51,22 @@ export default function Home() {
   }
 
   // 크로스 프로덕트: 프레임 × 텍스트 행
-  const buildJson = (rows: TextRow[], camp: string, frames = validFrames, ai = autoImages) => {
+  const buildJson = (
+    rows: TextRow[], camp: string, frames = validFrames, ai = autoImages,
+    lMain = layerMain, lSub = layerSub, lCta = layerCta
+  ) => {
     const variants: object[] = []
     let idx = 1
     for (const frame of frames) {
       for (const row of rows) {
+        const texts: Record<string, string> = {}
+        if (lMain) texts[lMain] = row.mainText
+        if (lSub)  texts[lSub]  = row.subText
+        if (lCta)  texts[lCta]  = row.ctaText
         variants.push({
           id: `${frame}_${String(idx).padStart(3, '0')}`,
           template: frame,
-          texts: {
-            'main-text': row.mainText,
-            'sub-text': row.subText,
-            'cta-text': row.ctaText,
-          },
+          texts,
           bg_color: row.bgColor,
           ...(ai ? { auto_images: true } : {}),
         })
@@ -298,13 +305,48 @@ export default function Home() {
           {error && <p style={{ color: '#c62828', margin: '4px 0 0', fontSize: 12 }}>{error}</p>}
         </div>
 
+        {/* 레이어명 안내 */}
+        <div style={{ marginBottom: 12, padding: '10px 14px', background: '#fffbeb', borderRadius: 6, fontSize: 12, color: '#78350f' }}>
+          <strong>Figma 레이어명 설정</strong> — 헤더를 실제 레이어명으로 수정하세요.
+          디버그 모드에서 확인한 이름을 그대로 입력하면 됩니다.
+        </div>
+
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: '#f5f5f5' }}>
-                {['버전', 'Main Text', 'Sub Text', 'CTA', '배경색', ''].map(h => (
-                  <th key={h} style={thStyle}>{h}</th>
-                ))}
+                <th style={thStyle}>버전</th>
+                <th style={thStyle}>
+                  <input
+                    value={layerMain}
+                    onChange={e => { setLayerMain(e.target.value); buildJson(textRows, campaign, validFrames, autoImages, e.target.value, layerSub, layerCta) }}
+                    style={{ ...headerInput, width: 130 }}
+                    title="Figma 텍스트 레이어명"
+                  />
+                </th>
+                <th style={thStyle}>
+                  <input
+                    value={layerSub}
+                    onChange={e => { setLayerSub(e.target.value); buildJson(textRows, campaign, validFrames, autoImages, layerMain, e.target.value, layerCta) }}
+                    style={{ ...headerInput, width: 130 }}
+                    title="Figma 텍스트 레이어명"
+                  />
+                </th>
+                <th style={thStyle}>
+                  <input
+                    value={layerCta}
+                    onChange={e => { setLayerCta(e.target.value); buildJson(textRows, campaign, validFrames, autoImages, layerMain, layerSub, e.target.value) }}
+                    style={{ ...headerInput, width: 100 }}
+                    title="Figma 텍스트 레이어명"
+                  />
+                </th>
+                <th style={thStyle}>배경색</th>
+                <th style={thStyle}></th>
+              </tr>
+              <tr style={{ background: '#fafafa', borderBottom: '1px solid #eee' }}>
+                <td colSpan={6} style={{ padding: '2px 12px', fontSize: 11, color: '#aaa' }}>
+                  ↑ 헤더 클릭해서 실제 Figma 레이어명으로 수정
+                </td>
               </tr>
             </thead>
             <tbody>
@@ -393,4 +435,8 @@ const cellInput: React.CSSProperties = {
 }
 const hintStyle: React.CSSProperties = {
   fontSize: 11, color: '#999', lineHeight: 1.6, margin: '4px 0 0',
+}
+const headerInput: React.CSSProperties = {
+  padding: '3px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12,
+  fontWeight: 600, background: '#fff', outline: 'none', boxSizing: 'border-box',
 }
