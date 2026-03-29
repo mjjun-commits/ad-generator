@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: -apple-system, sans-serif;
+      padding: 16px;
+      margin: 0;
+      font-size: 13px;
+    }
+    h3 { margin: 0 0 12px; font-size: 14px; }
+    .section-label {
+      font-size: 11px;
+      color: #888;
+      margin: 12px 0 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #run-btn {
+      background: #18A0FB;
+      color: white;
+      width: 100%;
+      margin-top: 12px;
+    }
+    #run-btn:disabled { background: #ccc; cursor: not-allowed; }
+    #cancel-btn {
+      background: #f0f0f0;
+      color: #333;
+      width: 100%;
+      margin-top: 8px;
+    }
+    .info-box {
+      padding: 8px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      color: #555;
+      min-height: 28px;
+      font-size: 12px;
+    }
+    #status {
+      margin-top: 12px;
+      padding: 8px;
+      border-radius: 4px;
+      display: none;
+      font-size: 12px;
+    }
+    .success { background: #e6f4ea; color: #1e7e34; }
+    .error   { background: #fde8e8; color: #c62828; }
+    label.file-btn {
+      display: block;
+      padding: 8px 12px;
+      background: #f0f0f0;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: center;
+    }
+    label.file-btn:hover { background: #e0e0e0; }
+    input[type="file"] { display: none; }
+  </style>
+</head>
+<body>
+  <h3>Ad Generator</h3>
+
+  <div class="section-label">1. variants.json</div>
+  <label class="file-btn" for="json-file">JSON 파일 선택</label>
+  <input type="file" id="json-file" accept=".json">
+  <div class="info-box" id="json-info">파일을 선택해주세요</div>
+
+  <div class="section-label">2. 이미지 파일 (선택사항)</div>
+  <label class="file-btn" for="img-files">이미지 파일 선택 (복수 선택 가능)</label>
+  <input type="file" id="img-files" accept="image/*" multiple>
+  <div class="info-box" id="img-info">이미지 없음</div>
+
+  <button id="run-btn" disabled>실행</button>
+  <button id="cancel-btn">취소</button>
+
+  <div id="status"></div>
+
+  <script>
+    let variantsData = null;
+    const imageMap = {}; // { filename: Uint8Array }
+
+    document.getElementById('json-file').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          variantsData = JSON.parse(evt.target.result);
+          const count = variantsData.variants ? variantsData.variants.length : 0;
+          document.getElementById('json-info').textContent = file.name + ' — variant ' + count + '개';
+          document.getElementById('run-btn').disabled = false;
+        } catch (err) {
+          document.getElementById('json-info').textContent = 'JSON 파싱 오류: ' + err.message;
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById('img-files').addEventListener('change', (e) => {
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+
+      let loaded = 0;
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          const buffer = evt.target.result;
+          imageMap[file.name] = new Uint8Array(buffer);
+          loaded++;
+          if (loaded === files.length) {
+            document.getElementById('img-info').textContent =
+              '이미지 ' + loaded + '개 로드됨: ' + files.map(f => f.name).join(', ');
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      });
+    });
+
+    document.getElementById('run-btn').onclick = () => {
+      if (!variantsData) return;
+      document.getElementById('run-btn').disabled = true;
+      document.getElementById('status').style.display = 'none';
+
+      // imageMap을 전송 가능한 형태로 변환 (Uint8Array → Array)
+      const images = {};
+      for (const [name, bytes] of Object.entries(imageMap)) {
+        images[name] = Array.from(bytes);
+      }
+
+      parent.postMessage({ pluginMessage: { type: 'run', data: variantsData, images } }, '*');
+    };
+
+    document.getElementById('cancel-btn').onclick = () => {
+      parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
+    };
+
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      if (!msg) return;
+
+      const statusEl = document.getElementById('status');
+      statusEl.style.display = 'block';
+
+      if (msg.type === 'done') {
+        statusEl.className = msg.failed > 0 ? 'error' : 'success';
+        let text = '완료: 성공 ' + msg.success + '개 / 실패 ' + msg.failed + '개';
+        if (msg.errors && msg.errors.length > 0) {
+          text += '\n\n에러:\n' + msg.errors.map(e => e.id + ': ' + e.error).join('\n');
+        }
+        statusEl.textContent = text;
+        statusEl.style.whiteSpace = 'pre-wrap';
+        document.getElementById('run-btn').disabled = false;
+      } else if (msg.type === 'error') {
+        statusEl.className = 'error';
+        statusEl.textContent = '오류: ' + msg.message;
+        statusEl.style.whiteSpace = 'pre-wrap';
+        document.getElementById('run-btn').disabled = false;
+      } else if (msg.type === 'progress') {
+        statusEl.style.display = 'block';
+        statusEl.className = '';
+        statusEl.style.background = '#fff8e1';
+        statusEl.style.color = '#333';
+        statusEl.textContent = msg.message;
+      }
+    };
+  </script>
+</body>
+</html>
