@@ -28,7 +28,7 @@ const DEFAULT_TEXT_ROW = (_index: number): TextRow => ({
   bgType: 'solid',
   gradColor1: '#4A90D9',
   gradColor2: '#7B2FF7',
-  gradAngle: 135,
+  gradAngle: 180,
 })
 
 export default function Home() {
@@ -590,9 +590,10 @@ export default function Home() {
                     <td style={td}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {/* 미리보기 + 토글 */}
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                          {/* 세로형 프리뷰 */}
                           <div style={{
-                            width: 28, height: 28, borderRadius: 6, flexShrink: 0, border: BORDER,
+                            width: 36, height: 56, borderRadius: 7, flexShrink: 0, border: BORDER,
                             background: row.bgType === 'gradient' ? `linear-gradient(${row.gradAngle}deg, ${row.gradColor1}, ${row.gradColor2})` : row.bgColor,
                           }} />
                           <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: BORDER }}>
@@ -613,7 +614,7 @@ export default function Home() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               <input type="color" value={row.gradColor1} onChange={e => handleRowChange(i, 'gradColor1', e.target.value)} style={{ width: 28, height: 28, border: 'none', cursor: 'pointer', borderRadius: 6, padding: 0 }} />
                               <input style={{ ...cellIn, width: 72 }} value={row.gradColor1} onChange={e => handleRowChange(i, 'gradColor1', e.target.value)} />
-                              <span style={{ color: '#c7c7cc', fontSize: 14 }}>→</span>
+                              <span style={{ color: '#c7c7cc', fontSize: 14 }}>↓</span>
                               <input type="color" value={row.gradColor2} onChange={e => handleRowChange(i, 'gradColor2', e.target.value)} style={{ width: 28, height: 28, border: 'none', cursor: 'pointer', borderRadius: 6, padding: 0 }} />
                               <input style={{ ...cellIn, width: 72 }} value={row.gradColor2} onChange={e => handleRowChange(i, 'gradColor2', e.target.value)} />
                             </div>
