@@ -9,6 +9,10 @@ interface TextRow {
   subText: string
   ctaText: string
   bgColor: string
+  bgType: 'solid' | 'gradient'
+  gradColor1: string
+  gradColor2: string
+  gradAngle: number
 }
 
 interface ScanFrame {
@@ -23,6 +27,10 @@ const DEFAULT_TEXT_ROW = (index: number): TextRow => ({
   subText: '',
   ctaText: '',
   bgColor: '#4A90D9',
+  bgType: 'solid',
+  gradColor1: '#4A90D9',
+  gradColor2: '#7B2FF7',
+  gradAngle: 135,
 })
 
 export default function Home() {
@@ -85,11 +93,14 @@ export default function Home() {
         if (lMain) texts[lMain] = row.mainText
         if (lSub)  texts[lSub]  = row.subText
         if (lCta)  texts[lCta]  = row.ctaText
+        const bgFields = row.bgType === 'gradient'
+          ? { bg_gradient: { type: 'linear', angle: row.gradAngle, stops: [{ color: row.gradColor1, position: 0 }, { color: row.gradColor2, position: 1 }] } }
+          : { bg_color: row.bgColor }
         variants.push({
           id: `${frame}_${String(idx).padStart(3, '0')}`,
           template: frame,
           texts,
-          bg_color: row.bgColor,
+          ...bgFields,
           ...(ai ? { auto_images: true } : {}),
         })
         idx++
@@ -202,7 +213,7 @@ export default function Home() {
     }
   }
 
-  const handleRowChange = (index: number, field: keyof TextRow, value: string) => {
+  const handleRowChange = (index: number, field: keyof TextRow, value: string | number) => {
     const updated = textRows.map((r, i) => i === index ? { ...r, [field]: value } : r)
     setTextRows(updated)
     buildJson(updated, campaign)
@@ -560,7 +571,7 @@ export default function Home() {
                     title="Figma 텍스트 레이어명"
                   />
                 </th>
-                <th style={thStyle}>배경색</th>
+                <th style={thStyle}>배경</th>
                 <th style={thStyle}></th>
               </tr>
               <tr style={{ background: '#fafafa', borderBottom: '1px solid #eee' }}>
@@ -585,9 +596,56 @@ export default function Home() {
                     <input style={{ ...cellInput, width: 100 }} value={row.ctaText} onChange={e => handleRowChange(i, 'ctaText', e.target.value)} placeholder={layerCta || '(비활성)'} disabled={!layerCta} />
                   </td>
                   <td style={tdStyle}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <input type="color" value={row.bgColor} onChange={e => handleRowChange(i, 'bgColor', e.target.value)} style={{ width: 32, height: 28, border: 'none', cursor: 'pointer', borderRadius: 4 }} />
-                      <input style={{ ...cellInput, width: 76 }} value={row.bgColor} onChange={e => handleRowChange(i, 'bgColor', e.target.value)} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 200 }}>
+                      {/* 단색/그라데이션 토글 */}
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          onClick={() => { handleRowChange(i, 'bgType', 'solid'); }}
+                          style={{ padding: '2px 8px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', background: row.bgType === 'solid' ? '#18A0FB' : '#f0f0f0', color: row.bgType === 'solid' ? '#fff' : '#555' }}
+                        >단색</button>
+                        <button
+                          onClick={() => { handleRowChange(i, 'bgType', 'gradient'); }}
+                          style={{ padding: '2px 8px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', background: row.bgType === 'gradient' ? '#6366f1' : '#f0f0f0', color: row.bgType === 'gradient' ? '#fff' : '#555' }}
+                        >그라데이션</button>
+                        {/* 미리보기 */}
+                        <div style={{
+                          flex: 1, height: 22, borderRadius: 4, marginLeft: 4,
+                          background: row.bgType === 'gradient'
+                            ? `linear-gradient(${row.gradAngle}deg, ${row.gradColor1}, ${row.gradColor2})`
+                            : row.bgColor,
+                          border: '1px solid #ddd',
+                        }} />
+                      </div>
+
+                      {/* 단색 */}
+                      {row.bgType === 'solid' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input type="color" value={row.bgColor} onChange={e => handleRowChange(i, 'bgColor', e.target.value)} style={{ width: 28, height: 24, border: 'none', cursor: 'pointer', borderRadius: 3 }} />
+                          <input style={{ ...cellInput, width: 76 }} value={row.bgColor} onChange={e => handleRowChange(i, 'bgColor', e.target.value)} />
+                        </div>
+                      )}
+
+                      {/* 그라데이션 */}
+                      {row.bgType === 'gradient' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input type="color" value={row.gradColor1} onChange={e => handleRowChange(i, 'gradColor1', e.target.value)} style={{ width: 28, height: 24, border: 'none', cursor: 'pointer', borderRadius: 3 }} />
+                            <input style={{ ...cellInput, width: 70 }} value={row.gradColor1} onChange={e => handleRowChange(i, 'gradColor1', e.target.value)} />
+                            <span style={{ fontSize: 11, color: '#aaa' }}>→</span>
+                            <input type="color" value={row.gradColor2} onChange={e => handleRowChange(i, 'gradColor2', e.target.value)} style={{ width: 28, height: 24, border: 'none', cursor: 'pointer', borderRadius: 3 }} />
+                            <input style={{ ...cellInput, width: 70 }} value={row.gradColor2} onChange={e => handleRowChange(i, 'gradColor2', e.target.value)} />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 11, color: '#888', whiteSpace: 'nowrap' }}>각도</span>
+                            <input
+                              type="range" min={0} max={360} value={row.gradAngle}
+                              onChange={e => handleRowChange(i, 'gradAngle', Number(e.target.value))}
+                              style={{ flex: 1 }}
+                            />
+                            <span style={{ fontSize: 11, color: '#555', minWidth: 30 }}>{row.gradAngle}°</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td style={tdStyle}>
