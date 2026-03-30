@@ -366,9 +366,8 @@ export default function Home() {
                 <div style={{ fontWeight: 700, color: '#374151', marginBottom: 4 }}>이미지 레이어</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {[
-                    { name: 'thumb', desc: '메인 이미지 (RECTANGLE에 image fill)' },
-                    { name: 'screen', desc: '기기 화면 이미지 (모바일/데스크탑 목업용)' },
-                    { name: 'thumb1, thumb2...', desc: 'auto_images 사용 시 — 번호 순서대로 자동 매핑' },
+                    { name: 'thumb', desc: '단일 이미지 — 이미지가 1개일 때 사용 (RECTANGLE에 image fill)' },
+                    { name: 'thumb1, thumb2...', desc: '복수 이미지 — 이미지가 여러 개일 때 번호 순서대로 자동 매핑' },
                   ].map(item => (
                     <div key={item.name} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 10px', background: '#fff', borderRadius: 6, border: '1px solid #e5e7eb' }}>
                       <code style={{ background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: 3, fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>{item.name}</code>
@@ -403,9 +402,9 @@ export default function Home() {
                 <div style={{ fontWeight: 700, color: '#92400e', marginBottom: 6 }}>프레임 작성 전 체크리스트</div>
                 {[
                   '헤드라인 텍스트 레이어 이름이 headline-text 인지 확인',
-                  '이미지 레이어가 RECTANGLE이고 이름이 thumb / screen 인지 확인',
+                  '이미지 1개 → 레이어 이름을 thumb으로, 여러 개 → thumb1, thumb2... 순서대로',
                   '배경 도형 레이어 이름이 bg / BG / background 중 하나인지 확인',
-                  '스캔 버튼으로 실제 레이어명을 확인하고 웹 UI 헤더와 일치시키기',
+                  '플러그인 스캔 버튼으로 실제 레이어명을 확인하고 웹 UI 헤더와 일치시키기',
                 ].map((item, i) => (
                   <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 4, color: '#78350f', fontSize: 11 }}>
                     <span style={{ color: '#f59e0b', flexShrink: 0 }}>✓</span>
@@ -418,26 +417,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Scan paste area */}
-        {!scanMode && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#6366f1', marginBottom: 6 }}>
-              Figma 플러그인 스캔 결과 붙여넣기
-            </div>
-            <textarea
-              style={{ ...inputStyle, height: 80, resize: 'vertical', fontFamily: 'monospace', fontSize: 11 }}
-              value={scanJson}
-              onChange={e => handleScanPaste(e.target.value)}
-              placeholder={'Figma 플러그인에서 "프레임 스캔" 버튼 클릭 후 복사된 JSON을 여기에 붙여넣으세요\n예: [{"frame":"JP_vs_sq_BASE","textLayers":["main-text","sub-text","cta-text"]}]'}
-            />
-            {scanError && <p style={{ color: '#c62828', fontSize: 11, marginTop: 4 }}>{scanError}</p>}
-            <div style={{ display: 'flex', alignItems: 'center', margin: '12px 0 8px' }}>
-              <div style={{ flex: 1, height: 1, background: '#eee' }} />
-              <span style={{ margin: '0 10px', fontSize: 11, color: '#bbb' }}>또는 직접 입력</span>
-              <div style={{ flex: 1, height: 1, background: '#eee' }} />
-            </div>
-          </div>
-        )}
 
         {/* Scan mode: frame checkboxes */}
         {scanMode && scanFrames.length > 0 && (
@@ -543,23 +522,7 @@ export default function Home() {
               <strong style={{ color: '#18A0FB' }}>총 {totalCount}개 소재</strong>
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={handleGenerate} disabled={loading} style={{ ...chipStyle, background: loading ? '#ccc' : '#6366f1', color: '#fff' }}>
-              {loading ? '생성 중...' : 'AI 카피 생성'}
-            </button>
-            <button onClick={addRow} style={{ ...chipStyle, background: '#f0f0f0' }}>+ 행 추가</button>
-          </div>
-        </div>
-
-        {/* 브리프 입력 */}
-        <div style={{ marginBottom: 12 }}>
-          <textarea
-            style={{ ...inputStyle, height: 60, resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }}
-            value={brief}
-            onChange={e => setBrief(e.target.value)}
-            placeholder="AI 카피 자동 생성용 브리프 (선택사항) — 예: 미리캔버스 IR 덱 템플릿 홍보, 10분 제작 강조"
-          />
-          {error && <p style={{ color: '#c62828', margin: '4px 0 0', fontSize: 12 }}>{error}</p>}
+          <button onClick={addRow} style={{ ...chipStyle, background: '#f0f0f0' }}>+ 행 추가</button>
         </div>
 
         {/* 레이어명 안내 */}
