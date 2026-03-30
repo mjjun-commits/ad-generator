@@ -309,21 +309,40 @@ export default function Home() {
 
         {/* Section 2 — 프레임 선택 */}
         <div style={card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
             <SectionLabel num="02" title="Figma 템플릿 프레임" desc="변형할 Figma 프레임 이름을 정확히 입력하세요." />
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              {scanMode && (
-                <button onClick={exitScanMode} style={{ ...appleBtn, background: '#fff', color: '#e34850', border: '1px solid #ffd0d3', fontSize: 13 }}>
-                  스캔 모드 해제
-                </button>
-              )}
-              <button
-                onClick={() => setShowGuide(v => !v)}
-                style={{ ...appleBtn, background: showGuide ? '#e8f0fe' : '#fff', color: APPLE_BLUE, border: `1px solid ${showGuide ? APPLE_BLUE : 'rgba(0,113,227,0.3)'}`, fontSize: 13 }}
-              >
-                {showGuide ? '가이드 닫기' : '레이어 가이드'}
+            {scanMode && (
+              <button onClick={exitScanMode} style={{ ...appleBtn, background: '#fff', color: '#e34850', border: '1px solid #ffd0d3', fontSize: 13, flexShrink: 0 }}>
+                스캔 모드 해제
               </button>
+            )}
+          </div>
+
+          {/* 레이어 가이드 배너 */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+            padding: '14px 18px', marginBottom: 20, borderRadius: 12,
+            background: 'linear-gradient(135deg, #f0f4ff 0%, #fafbff 100%)',
+            border: '1px solid rgba(0,113,227,0.15)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: APPLE_BLUE, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="7" stroke="white" strokeWidth="1.5"/>
+                  <path d="M8 7v4" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+                  <circle cx="8" cy="5" r="0.75" fill="white"/>
+                </svg>
+              </div>
+              <span style={{ fontSize: 14, color: '#1d1d1f', fontWeight: 500, lineHeight: 1.4 }}>
+                프레임 작성 전 프레임 내 레이어가 잘 기입되어 있는지 체크해주세요!
+              </span>
             </div>
+            <button
+              onClick={() => setShowGuide(v => !v)}
+              style={{ ...appleBtn, background: showGuide ? APPLE_BLUE : '#fff', color: showGuide ? '#fff' : APPLE_BLUE, border: `1px solid ${APPLE_BLUE}`, fontSize: 13, flexShrink: 0, padding: '8px 16px' }}
+            >
+              {showGuide ? '가이드 닫기' : '레이어 가이드 보기'}
+            </button>
           </div>
 
           {/* Layer Naming Guide */}
