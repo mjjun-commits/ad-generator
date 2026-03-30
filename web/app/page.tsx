@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { supabase, Campaign } from '@/lib/supabase'
 
 interface TextRow {
-  label: string
   mainText: string
   subText: string
   ctaText: string
@@ -21,8 +20,7 @@ interface ScanFrame {
   selected: boolean
 }
 
-const DEFAULT_TEXT_ROW = (index: number): TextRow => ({
-  label: `버전 ${String.fromCharCode(65 + index)}`,
+const DEFAULT_TEXT_ROW = (_index: number): TextRow => ({
   mainText: '',
   subText: '',
   ctaText: '',
@@ -45,7 +43,7 @@ export default function Home() {
   const [savedCampaigns, setSavedCampaigns] = useState<Campaign[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [autoImages, setAutoImages] = useState(false)
-  const [layerMain, setLayerMain] = useState('main-text')
+  const [layerMain, setLayerMain] = useState('headline-text')
   const [layerSub, setLayerSub] = useState('sub-text')
   const [layerCta, setLayerCta] = useState('cta-text')
   const [showGuide, setShowGuide] = useState(false)
@@ -179,7 +177,6 @@ export default function Home() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || '생성 실패')
       const newRows: TextRow[] = data.variants.map((v: { mainText: string; subText: string; ctaText: string; bgColor: string }, i: number) => ({
-        label: `버전 ${String.fromCharCode(65 + i)}`,
         mainText: v.mainText, subText: v.subText, ctaText: v.ctaText,
         bgColor: v.bgColor || '#4A90D9', bgType: 'solid' as const, gradColor1: '#4A90D9', gradColor2: '#7B2FF7', gradAngle: 135,
       }))
@@ -549,7 +546,6 @@ export default function Home() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: BORDER }}>
-                  <th style={{ ...th, width: 80 }}>버전</th>
                   <th style={th}>
                     <div style={{ fontSize: 10, color: TEXT_SECONDARY, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>레이어명 수정 가능</div>
                     <input value={layerMain} onChange={e => { setLayerMain(e.target.value); buildJson(textRows, campaign, validFrames, autoImages, e.target.value, layerSub, layerCta) }} style={layerInput} placeholder="main-text" />
@@ -569,9 +565,6 @@ export default function Home() {
               <tbody>
                 {textRows.map((row, i) => (
                   <tr key={i} style={{ borderBottom: i < textRows.length - 1 ? BORDER : 'none', transition: 'background 0.1s' }}>
-                    <td style={td}>
-                      <input style={{ ...cellIn, fontWeight: 700, color: APPLE_BLUE, width: 68 }} value={row.label} onChange={e => handleRowChange(i, 'label', e.target.value)} />
-                    </td>
                     <td style={td}><input style={cellIn} value={row.mainText} onChange={e => handleRowChange(i, 'mainText', e.target.value)} placeholder={layerMain || '(비활성)'} disabled={!layerMain} /></td>
                     <td style={td}><input style={cellIn} value={row.subText} onChange={e => handleRowChange(i, 'subText', e.target.value)} placeholder={layerSub || '(비활성)'} disabled={!layerSub} /></td>
                     <td style={td}><input style={{ ...cellIn, width: 110 }} value={row.ctaText} onChange={e => handleRowChange(i, 'ctaText', e.target.value)} placeholder={layerCta || '(비활성)'} disabled={!layerCta} /></td>
