@@ -48,7 +48,6 @@ export default function Home() {
   const [layerMain, setLayerMain] = useState('main-text')
   const [layerSub, setLayerSub] = useState('sub-text')
   const [layerCta, setLayerCta] = useState('cta-text')
-
   const [showGuide, setShowGuide] = useState(false)
 
   // Scan mode state
@@ -62,7 +61,6 @@ export default function Home() {
     : frameNames.filter(f => f.trim() !== '')
   const totalCount = validFrames.length * textRows.length
 
-  // All unique layers across selected (or all) scan frames
   const scanLayerOptions = (() => {
     if (!scanMode || scanFrames.length === 0) return []
     const selected = scanFrames.filter(f => f.selected)
@@ -113,38 +111,27 @@ export default function Home() {
     return json
   }
 
-  // Parse scan JSON pasted by user
   const handleScanPaste = (raw: string) => {
     setScanJson(raw)
     setScanError('')
-    if (!raw.trim()) {
-      setScanFrames([])
-      return
-    }
+    if (!raw.trim()) { setScanFrames([]); return }
     try {
       const parsed = JSON.parse(raw)
       if (!Array.isArray(parsed)) throw new Error('배열 형식이어야 합니다')
       const frames: ScanFrame[] = parsed.map((item: { frame: string; textLayers: string[] }) => ({
-        frame: item.frame,
-        textLayers: item.textLayers || [],
-        selected: true,
+        frame: item.frame, textLayers: item.textLayers || [], selected: true,
       }))
       setScanFrames(frames)
       setScanMode(true)
-
-      // Auto-detect layer names from first frame
       if (frames.length > 0) {
         const allLayers = frames[0].textLayers
-        // Try to auto-match common patterns
         const guessMain = allLayers.find(l => /main|headline|title|제목/i.test(l)) || allLayers[0] || ''
         const guessSub = allLayers.find(l => /sub|body|description|설명/i.test(l)) || allLayers[1] || ''
         const guessCta = allLayers.find(l => /cta|button|버튼/i.test(l)) || allLayers[2] || ''
         if (guessMain) setLayerMain(guessMain)
         if (guessSub) setLayerSub(guessSub)
         if (guessCta) setLayerCta(guessCta)
-        // Rebuild JSON with new frames and auto-detected layers
-        const newFrames = frames.filter(f => f.selected).map(f => f.frame)
-        buildJson(textRows, campaign, newFrames, autoImages, guessMain, guessSub, guessCta)
+        buildJson(textRows, campaign, frames.filter(f => f.selected).map(f => f.frame), autoImages, guessMain, guessSub, guessCta)
       }
     } catch (e) {
       setScanError('파싱 오류: ' + String(e))
@@ -155,23 +142,16 @@ export default function Home() {
   const toggleScanFrame = (index: number) => {
     const updated = scanFrames.map((f, i) => i === index ? { ...f, selected: !f.selected } : f)
     setScanFrames(updated)
-    const newFrames = updated.filter(f => f.selected).map(f => f.frame)
-    buildJson(textRows, campaign, newFrames)
+    buildJson(textRows, campaign, updated.filter(f => f.selected).map(f => f.frame))
   }
 
   const selectAllScanFrames = (val: boolean) => {
     const updated = scanFrames.map(f => ({ ...f, selected: val }))
     setScanFrames(updated)
-    const newFrames = updated.filter(f => f.selected).map(f => f.frame)
-    buildJson(textRows, campaign, newFrames)
+    buildJson(textRows, campaign, updated.filter(f => f.selected).map(f => f.frame))
   }
 
-  const exitScanMode = () => {
-    setScanMode(false)
-    setScanJson('')
-    setScanFrames([])
-    setScanError('')
-  }
+  const exitScanMode = () => { setScanMode(false); setScanJson(''); setScanFrames([]); setScanError('') }
 
   const handleFrameChange = (index: number, value: string) => {
     const updated = frameNames.map((f, i) => i === index ? value : f)
@@ -189,8 +169,7 @@ export default function Home() {
 
   const handleGenerate = async () => {
     if (!brief.trim()) { setError('광고 브리프를 입력해주세요'); return }
-    setLoading(true)
-    setError('')
+    setLoading(true); setError('')
     try {
       const res = await fetch('/api/generate', {
         method: 'POST',
@@ -201,18 +180,13 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error || '생성 실패')
       const newRows: TextRow[] = data.variants.map((v: { mainText: string; subText: string; ctaText: string; bgColor: string }, i: number) => ({
         label: `버전 ${String.fromCharCode(65 + i)}`,
-        mainText: v.mainText,
-        subText: v.subText,
-        ctaText: v.ctaText,
-        bgColor: v.bgColor || '#4A90D9',
+        mainText: v.mainText, subText: v.subText, ctaText: v.ctaText,
+        bgColor: v.bgColor || '#4A90D9', bgType: 'solid' as const, gradColor1: '#4A90D9', gradColor2: '#7B2FF7', gradAngle: 135,
       }))
       setTextRows(newRows)
       buildJson(newRows, campaign)
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setLoading(false)
-    }
+    } catch (e) { setError(String(e)) }
+    finally { setLoading(false) }
   }
 
   const handleRowChange = (index: number, field: keyof TextRow, value: string | number) => {
@@ -223,25 +197,20 @@ export default function Home() {
 
   const addRow = () => {
     const updated = [...textRows, DEFAULT_TEXT_ROW(textRows.length)]
-    setTextRows(updated)
-    buildJson(updated, campaign)
+    setTextRows(updated); buildJson(updated, campaign)
   }
 
   const removeRow = (index: number) => {
     if (textRows.length <= 1) return
     const updated = textRows.filter((_, i) => i !== index)
-    setTextRows(updated)
-    buildJson(updated, campaign)
+    setTextRows(updated); buildJson(updated, campaign)
   }
 
   const handleSave = async () => {
-    setSaving(true)
-    setError('')
+    setSaving(true); setError('')
     const json = buildJson(textRows, campaign)
     const { error: saveError } = await supabase.from('campaigns').insert({
-      name: campaign || '이름 없음',
-      brief: brief || null,
-      variants: json,
+      name: campaign || '이름 없음', brief: brief || null, variants: json,
     })
     if (saveError) setError('저장 실패: ' + saveError.message)
     else { await loadHistory(); setShowHistory(true) }
@@ -260,512 +229,478 @@ export default function Home() {
     const blob = new Blob([jsonOutput], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
-    a.download = `${campaign || 'variants'}.json`
-    a.click()
+    a.href = url; a.download = `${campaign || 'variants'}.json`; a.click()
     URL.revokeObjectURL(url)
   }
 
+  const APPLE_BLUE = '#0071e3'
+  const APPLE_GRAY = '#f5f5f7'
+  const TEXT_PRIMARY = '#1d1d1f'
+  const TEXT_SECONDARY = '#6e6e73'
+  const BORDER = '1px solid rgba(0,0,0,0.08)'
+
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 16px' }}>
+    <div style={{ minHeight: '100vh', background: APPLE_GRAY, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif' }}>
 
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Ad Generator</h1>
-          <p style={{ color: '#888', margin: 0, fontSize: 13 }}>Figma 프레임 이름 입력 × 텍스트 변형 → variants.json</p>
-        </div>
-        <button onClick={() => setShowHistory(!showHistory)} style={{ ...chipStyle, background: showHistory ? '#18A0FB' : '#f0f0f0', color: showHistory ? '#fff' : '#333' }}>
-          히스토리 {savedCampaigns.length > 0 ? `(${savedCampaigns.length})` : ''}
-        </button>
-      </div>
-
-      {/* History */}
-      {showHistory && (
-        <section style={{ ...sectionStyle, marginBottom: 16 }}>
-          <h2 style={sectionTitle}>저장된 캠페인</h2>
-          {savedCampaigns.length === 0 ? (
-            <p style={{ color: '#aaa', fontSize: 13 }}>저장된 캠페인 없음</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {savedCampaigns.map(c => (
-                <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#f9f9f9', borderRadius: 6 }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</div>
-                    <div style={{ color: '#888', fontSize: 11, marginTop: 2 }}>
-                      {new Date(c.created_at).toLocaleString('ko-KR')}
-                      {c.brief ? ` · ${c.brief.slice(0, 50)}...` : ''}
-                    </div>
-                  </div>
-                  <button onClick={() => handleLoadCampaign(c)} style={{ ...chipStyle, background: '#fff', border: '1px solid #ddd', fontSize: 12 }}>불러오기</button>
-                </div>
-              ))}
+      {/* Top Nav */}
+      <nav style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(20px)', borderBottom: BORDER, position: 'sticky', top: 0, zIndex: 100 }}>
+        <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 24px', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 20, height: 20, background: APPLE_BLUE, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="white"><rect x="1" y="1" width="4" height="4" rx="1"/><rect x="7" y="1" width="4" height="4" rx="1"/><rect x="1" y="7" width="4" height="4" rx="1"/><rect x="7" y="7" width="4" height="4" rx="1"/></svg>
             </div>
-          )}
-        </section>
-      )}
-
-      {/* 1. 캠페인 이름 */}
-      <section style={sectionStyle}>
-        <h2 style={sectionTitle}>1. 캠페인 이름</h2>
-        <input
-          style={inputStyle}
-          value={campaign}
-          onChange={e => { setCampaign(e.target.value); buildJson(textRows, e.target.value) }}
-          placeholder="예: ir_deck_apr2026"
-        />
-        <p style={hintStyle}>다운로드되는 JSON 파일명이 됩니다.</p>
-      </section>
-
-      {/* 2. 프레임 선택 */}
-      <section style={sectionStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-          <div>
-            <h2 style={{ ...sectionTitle, margin: 0 }}>2. Figma 템플릿 프레임 선택</h2>
-            <p style={hintStyle}>스캔 결과를 붙여넣으면 프레임을 체크박스로 선택할 수 있습니다.</p>
-            <button onClick={() => setShowGuide(v => !v)} style={{ marginTop: 6, padding: '3px 10px', fontSize: 11, borderRadius: 4, border: '1px solid #d1d5db', background: showGuide ? '#f0f7ff' : '#fafafa', color: '#6366f1', cursor: 'pointer', fontWeight: 600 }}>
-              {showGuide ? '▲ 레이어 네이밍 가이드 닫기' : '▼ 레이어 네이밍 가이드 보기'}
-            </button>
+            <span style={{ fontSize: 16, fontWeight: 600, color: TEXT_PRIMARY, letterSpacing: '-0.3px' }}>Ad Generator</span>
           </div>
-          {scanMode && (
-            <button onClick={exitScanMode} style={{ ...chipStyle, background: '#fee2e2', color: '#c62828', fontSize: 12 }}>
-              스캔 모드 해제
-            </button>
-          )}
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            style={{ fontSize: 13, color: showHistory ? APPLE_BLUE : TEXT_SECONDARY, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500, padding: '4px 0' }}
+          >
+            히스토리{savedCampaigns.length > 0 ? ` (${savedCampaigns.length})` : ''}
+          </button>
+        </div>
+      </nav>
+
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 24px 80px' }}>
+
+        {/* Page Title */}
+        <div style={{ marginBottom: 40 }}>
+          <h1 style={{ fontSize: 34, fontWeight: 700, color: TEXT_PRIMARY, margin: '0 0 8px', letterSpacing: '-0.5px' }}>
+            광고 소재 생성
+          </h1>
+          <p style={{ fontSize: 17, color: TEXT_SECONDARY, margin: 0, fontWeight: 400 }}>
+            Figma 프레임 × 텍스트 변형 → variants.json
+          </p>
         </div>
 
-        {/* 레이어 네이밍 가이드 */}
-        {showGuide && (
-          <div style={{ marginBottom: 16, borderRadius: 8, border: '1px solid #e0e7ff', overflow: 'hidden', fontSize: 12 }}>
-            <div style={{ background: '#6366f1', color: '#fff', padding: '8px 14px', fontWeight: 700, fontSize: 13 }}>
-              Figma 레이어 네이밍 규칙
-            </div>
-            <div style={{ padding: '12px 14px', background: '#fafbff', display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-              {/* 텍스트 */}
-              <div>
-                <div style={{ fontWeight: 700, color: '#374151', marginBottom: 4 }}>텍스트 레이어</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {[
-                    { name: 'headline-text', desc: '메인 헤드라인 (가장 크고 굵은 텍스트)', required: true },
-                    { name: 'sub-text', desc: '서브 카피 / 설명 텍스트', required: false },
-                    { name: 'cta-text', desc: 'CTA 버튼 텍스트', required: false },
-                  ].map(item => (
-                    <div key={item.name} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 10px', background: '#fff', borderRadius: 6, border: '1px solid #e5e7eb' }}>
-                      <code style={{ background: '#e0e7ff', color: '#3730a3', padding: '1px 6px', borderRadius: 3, fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>{item.name}</code>
-                      <span style={{ color: '#6b7280' }}>{item.desc}</span>
-                      {item.required && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#dc2626', background: '#fee2e2', padding: '1px 5px', borderRadius: 3, whiteSpace: 'nowrap', flexShrink: 0 }}>권장</span>}
+        {/* History Panel */}
+        {showHistory && (
+          <div style={{ background: '#fff', borderRadius: 18, padding: 24, marginBottom: 24, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: BORDER }}>
+            <h2 style={{ fontSize: 17, fontWeight: 600, color: TEXT_PRIMARY, margin: '0 0 16px', letterSpacing: '-0.2px' }}>저장된 캠페인</h2>
+            {savedCampaigns.length === 0 ? (
+              <p style={{ color: TEXT_SECONDARY, fontSize: 14, margin: 0 }}>저장된 캠페인이 없습니다.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {savedCampaigns.map(c => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: APPLE_GRAY, borderRadius: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: TEXT_PRIMARY }}>{c.name}</div>
+                      <div style={{ color: TEXT_SECONDARY, fontSize: 12, marginTop: 2 }}>
+                        {new Date(c.created_at).toLocaleString('ko-KR')}
+                        {c.brief ? ` · ${c.brief.slice(0, 40)}...` : ''}
+                      </div>
                     </div>
-                  ))}
-                </div>
-                <p style={{ color: '#9ca3af', fontSize: 11, marginTop: 6 }}>※ 레이어 이름이 다르면 웹 UI의 레이어명 헤더를 실제 이름으로 수정하세요.</p>
-              </div>
-
-              {/* 이미지 */}
-              <div>
-                <div style={{ fontWeight: 700, color: '#374151', marginBottom: 4 }}>이미지 레이어</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {[
-                    { name: 'thumb', desc: '단일 이미지 — 이미지가 1개일 때 사용 (RECTANGLE에 image fill)' },
-                    { name: 'thumb1, thumb2...', desc: '복수 이미지 — 이미지가 여러 개일 때 번호 순서대로 자동 매핑' },
-                  ].map(item => (
-                    <div key={item.name} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 10px', background: '#fff', borderRadius: 6, border: '1px solid #e5e7eb' }}>
-                      <code style={{ background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: 3, fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>{item.name}</code>
-                      <span style={{ color: '#6b7280' }}>{item.desc}</span>
-                    </div>
-                  ))}
-                </div>
-                <p style={{ color: '#9ca3af', fontSize: 11, marginTop: 6 }}>※ 플러그인 스캔 결과의 <code style={{ background: '#f3f4f6', padding: '0 3px', borderRadius: 2 }}>imageLayers</code> 항목에서 실제 이름을 확인하세요.</p>
-              </div>
-
-              {/* 배경 */}
-              <div>
-                <div style={{ fontWeight: 700, color: '#374151', marginBottom: 4 }}>배경 레이어</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {[
-                    { name: 'bg', desc: '가장 일반적인 배경 도형 이름' },
-                    { name: 'BG', desc: '대문자 버전도 인식' },
-                    { name: 'background / Background', desc: '영문 전체 이름도 인식' },
-                    { name: 'bg-rectangle', desc: '기존 형식도 인식' },
-                  ].map(item => (
-                    <div key={item.name} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 10px', background: '#fff', borderRadius: 6, border: '1px solid #e5e7eb' }}>
-                      <code style={{ background: '#d1fae5', color: '#065f46', padding: '1px 6px', borderRadius: 3, fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>{item.name}</code>
-                      <span style={{ color: '#6b7280' }}>{item.desc}</span>
-                    </div>
-                  ))}
-                </div>
-                <p style={{ color: '#9ca3af', fontSize: 11, marginTop: 6 }}>※ 배경 레이어가 없으면 프레임 자체 배경색을 변경합니다. 배경 레이어가 있다면 그 레이어 fill이 우선 변경됩니다.</p>
-              </div>
-
-              {/* 체크리스트 */}
-              <div style={{ padding: '10px 12px', background: '#fffbeb', borderRadius: 6, border: '1px solid #fde68a' }}>
-                <div style={{ fontWeight: 700, color: '#92400e', marginBottom: 6 }}>프레임 작성 전 체크리스트</div>
-                {[
-                  '헤드라인 텍스트 레이어 이름이 headline-text 인지 확인',
-                  '이미지 1개 → 레이어 이름을 thumb으로, 여러 개 → thumb1, thumb2... 순서대로',
-                  '배경 도형 레이어 이름이 bg / BG / background 중 하나인지 확인',
-                  '플러그인 스캔 버튼으로 실제 레이어명을 확인하고 웹 UI 헤더와 일치시키기',
-                ].map((item, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 4, color: '#78350f', fontSize: 11 }}>
-                    <span style={{ color: '#f59e0b', flexShrink: 0 }}>✓</span>
-                    <span>{item}</span>
+                    <button onClick={() => handleLoadCampaign(c)} style={{ ...appleBtn, background: '#fff', color: APPLE_BLUE, border: `1px solid ${APPLE_BLUE}`, fontSize: 13, padding: '6px 14px' }}>
+                      불러오기
+                    </button>
                   </div>
                 ))}
               </div>
-
-            </div>
+            )}
           </div>
         )}
 
+        {/* Section 1 — 캠페인 이름 */}
+        <div style={card}>
+          <SectionLabel num="01" title="캠페인 이름" desc="다운로드되는 JSON 파일명이 됩니다." />
+          <input
+            style={appleInput}
+            value={campaign}
+            onChange={e => { setCampaign(e.target.value); buildJson(textRows, e.target.value) }}
+            placeholder="예: ir_deck_apr2026"
+          />
+        </div>
 
-        {/* Scan mode: frame checkboxes */}
-        {scanMode && scanFrames.length > 0 && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>
-                프레임 선택 — {scanFrames.filter(f => f.selected).length}/{scanFrames.length}개 선택됨
-              </span>
-              <button onClick={() => selectAllScanFrames(true)} style={{ ...chipStyle, padding: '3px 10px', fontSize: 11, background: '#f0f0f0' }}>전체 선택</button>
-              <button onClick={() => selectAllScanFrames(false)} style={{ ...chipStyle, padding: '3px 10px', fontSize: 11, background: '#f0f0f0' }}>전체 해제</button>
+        {/* Section 2 — 프레임 선택 */}
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+            <SectionLabel num="02" title="Figma 템플릿 프레임" desc="변형할 Figma 프레임 이름을 정확히 입력하세요." />
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              {scanMode && (
+                <button onClick={exitScanMode} style={{ ...appleBtn, background: '#fff', color: '#e34850', border: '1px solid #ffd0d3', fontSize: 13 }}>
+                  스캔 모드 해제
+                </button>
+              )}
+              <button
+                onClick={() => setShowGuide(v => !v)}
+                style={{ ...appleBtn, background: showGuide ? '#e8f0fe' : '#fff', color: APPLE_BLUE, border: `1px solid ${showGuide ? APPLE_BLUE : 'rgba(0,113,227,0.3)'}`, fontSize: 13 }}
+              >
+                {showGuide ? '가이드 닫기' : '레이어 가이드'}
+              </button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflowY: 'auto', padding: '2px 0' }}>
-              {scanFrames.map((sf, i) => (
-                <label key={i} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer',
-                  padding: '8px 12px', borderRadius: 6,
-                  background: sf.selected ? '#f0f7ff' : '#fafafa',
-                  border: sf.selected ? '1px solid #bfdbfe' : '1px solid #eee',
-                  transition: 'all 0.1s',
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={sf.selected}
-                    onChange={() => toggleScanFrame(i)}
-                    style={{ marginTop: 2, cursor: 'pointer', accentColor: '#18A0FB' }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: sf.selected ? '#1e40af' : '#666', wordBreak: 'break-all' }}>
-                      {sf.frame}
+          </div>
+
+          {/* Layer Naming Guide */}
+          {showGuide && (
+            <div style={{ marginBottom: 20, borderRadius: 12, overflow: 'hidden', border: BORDER }}>
+              <div style={{ background: TEXT_PRIMARY, color: '#fff', padding: '12px 18px', fontSize: 13, fontWeight: 600, letterSpacing: '-0.1px' }}>
+                Figma 레이어 네이밍 규칙
+              </div>
+              <div style={{ background: '#fff', padding: '16px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+                {[
+                  {
+                    title: '텍스트 레이어', color: '#e8f0fe', textColor: '#1a56db',
+                    items: [
+                      { name: 'headline-text', desc: '메인 헤드라인' },
+                      { name: 'sub-text', desc: '서브 카피' },
+                      { name: 'cta-text', desc: 'CTA 버튼' },
+                    ],
+                    note: '※ 레이어 이름이 다르면 아래 헤더를 직접 수정',
+                  },
+                  {
+                    title: '이미지 레이어', color: '#fef9e7', textColor: '#9a6c00',
+                    items: [
+                      { name: 'thumb', desc: '단일 이미지 (1개)' },
+                      { name: 'thumb1, thumb2...', desc: '복수 이미지 (자동 매핑)' },
+                    ],
+                    note: '※ RECTANGLE에 image fill이 있어야 함',
+                  },
+                  {
+                    title: '배경 레이어', color: '#e6f9f0', textColor: '#0a7340',
+                    items: [
+                      { name: 'bg / BG', desc: '일반적인 배경 도형' },
+                      { name: 'background', desc: '영문 전체 이름' },
+                      { name: 'bg-rectangle', desc: '기존 형식' },
+                    ],
+                    note: '※ 없으면 프레임 자체 배경 변경',
+                  },
+                ].map(group => (
+                  <div key={group.title}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: TEXT_SECONDARY, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>{group.title}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {group.items.map(item => (
+                        <div key={item.name} style={{ padding: '7px 10px', borderRadius: 8, background: APPLE_GRAY }}>
+                          <code style={{ fontSize: 12, fontWeight: 600, color: TEXT_PRIMARY, fontFamily: '"SF Mono", "Fira Code", monospace' }}>{item.name}</code>
+                          <div style={{ fontSize: 11, color: TEXT_SECONDARY, marginTop: 2 }}>{item.desc}</div>
+                        </div>
+                      ))}
                     </div>
-                    {sf.textLayers.length > 0 && (
-                      <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {sf.textLayers.map((layer, j) => (
-                          <span key={j} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, background: '#e5e7eb', color: '#374151', fontFamily: 'monospace' }}>
-                            {layer}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    <p style={{ fontSize: 11, color: TEXT_SECONDARY, marginTop: 8 }}>{group.note}</p>
                   </div>
-                </label>
-              ))}
+                ))}
+              </div>
+              <div style={{ background: '#fffbeb', borderTop: '1px solid #fde68a', padding: '12px 18px' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#78350f', marginBottom: 6 }}>프레임 작성 전 체크리스트</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                  {[
+                    'headline-text 레이어 이름 확인',
+                    'thumb / thumb1, thumb2... 이름 확인',
+                    'bg / background 배경 레이어 확인',
+                    '플러그인 스캔으로 실제 레이어명 검증',
+                  ].map((item, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 12, color: '#78350f' }}>
+                      <span style={{ color: '#f59e0b', marginTop: 1 }}>✓</span>
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Manual frame input (shown when NOT in scan mode) */}
-        {!scanMode && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-              <button onClick={addFrame} style={{ ...chipStyle, background: '#f0f0f0' }}>+ 추가</button>
+          {/* Scan frame checkboxes */}
+          {scanMode && scanFrames.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY }}>
+                  {scanFrames.filter(f => f.selected).length}/{scanFrames.length}개 선택됨
+                </span>
+                <button onClick={() => selectAllScanFrames(true)} style={{ ...appleBtn, fontSize: 12, padding: '4px 12px', background: APPLE_GRAY, color: TEXT_PRIMARY, border: BORDER }}>전체 선택</button>
+                <button onClick={() => selectAllScanFrames(false)} style={{ ...appleBtn, fontSize: 12, padding: '4px 12px', background: APPLE_GRAY, color: TEXT_PRIMARY, border: BORDER }}>전체 해제</button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 280, overflowY: 'auto' }}>
+                {scanFrames.map((sf, i) => (
+                  <label key={i} style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer',
+                    padding: '10px 14px', borderRadius: 10,
+                    background: sf.selected ? '#e8f0fe' : '#fff',
+                    border: sf.selected ? `1px solid ${APPLE_BLUE}` : BORDER,
+                    transition: 'all 0.15s',
+                  }}>
+                    <input type="checkbox" checked={sf.selected} onChange={() => toggleScanFrame(i)} style={{ marginTop: 2, accentColor: APPLE_BLUE }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: '"SF Mono", monospace', fontSize: 13, fontWeight: 600, color: sf.selected ? APPLE_BLUE : TEXT_PRIMARY, wordBreak: 'break-all' }}>{sf.frame}</div>
+                      {sf.textLayers.length > 0 && (
+                        <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {sf.textLayers.map((layer, j) => (
+                            <span key={j} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: 'rgba(0,0,0,0.06)', color: TEXT_SECONDARY, fontFamily: 'monospace' }}>{layer}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </label>
+                ))}
+              </div>
             </div>
+          )}
+
+          {/* Manual frame input */}
+          {!scanMode && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {frameNames.map((name, i) => (
                 <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input
-                    style={{ ...inputStyle, fontFamily: 'monospace', fontSize: 13 }}
+                    style={{ ...appleInput, fontFamily: '"SF Mono", "Fira Code", monospace', fontSize: 13 }}
                     value={name}
                     onChange={e => handleFrameChange(i, e.target.value)}
                     placeholder="예: JP_vs_sq_BASE_edu"
                   />
-                  <button onClick={() => removeFrame(i)} style={{ background: 'none', border: 'none', color: '#bbb', cursor: 'pointer', fontSize: 18, flexShrink: 0 }}>✕</button>
+                  <button onClick={() => removeFrame(i)} style={{ background: 'none', border: 'none', color: '#c7c7cc', cursor: 'pointer', fontSize: 20, lineHeight: 1, flexShrink: 0, padding: '0 4px' }}>×</button>
                 </div>
               ))}
+              <button onClick={addFrame} style={{ ...appleBtn, background: APPLE_GRAY, color: APPLE_BLUE, border: BORDER, fontSize: 14, padding: '10px', width: '100%', marginTop: 4 }}>
+                + 프레임 추가
+              </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {validFrames.length > 0 && (
-          <div style={{ marginTop: 12, padding: '8px 12px', background: '#f0f7ff', borderRadius: 6, fontSize: 12 }}>
-            <span style={{ color: '#555', fontWeight: 600 }}>선택된 프레임 {validFrames.length}개: </span>
-            {validFrames.map((f, i) => (
-              <span key={i} style={{ display: 'inline-block', background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: 4, margin: '2px 4px 2px 0', fontFamily: 'monospace' }}>{f}</span>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* 3. 이미지 설정 */}
-      <section style={sectionStyle}>
-        <h2 style={sectionTitle}>3. 이미지 설정</h2>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <div
-            onClick={() => { const next = !autoImages; setAutoImages(next); buildJson(textRows, campaign, validFrames, next) }}
-            style={{ width: 44, height: 24, borderRadius: 12, background: autoImages ? '#18A0FB' : '#ccc', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}
-          >
-            <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: autoImages ? 23 : 3, transition: 'left 0.2s' }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>이미지 자동 매핑 (auto_images)</div>
-            <div style={{ ...hintStyle, marginTop: 2 }}>켜면 Figma 플러그인에서 업로드 이미지를 thumb 레이어에 순서대로 자동 매핑</div>
-          </div>
-        </label>
-      </section>
-
-      {/* 4. 텍스트 변형 */}
-      <section style={sectionStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div>
-            <h2 style={{ ...sectionTitle, margin: 0 }}>4. 텍스트 변형</h2>
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#888' }}>
-              {validFrames.length}개 프레임 × {textRows.length}개 버전 =&nbsp;
-              <strong style={{ color: '#18A0FB' }}>총 {totalCount}개 소재</strong>
-            </p>
-          </div>
-          <button onClick={addRow} style={{ ...chipStyle, background: '#f0f0f0' }}>+ 행 추가</button>
-        </div>
-
-        {/* 레이어명 안내 */}
-        <div style={{ marginBottom: 12, padding: '10px 14px', background: '#fffbeb', borderRadius: 6, fontSize: 12, color: '#78350f' }}>
-          <strong>Figma 레이어명 설정</strong>
-          {scanMode && scanLayerOptions.length > 0 ? (
-            <span> — 스캔된 레이어명 중에서 클릭해서 선택하거나 직접 수정하세요.</span>
-          ) : (
-            <span> — 헤더를 실제 레이어명으로 수정하세요. 디버그 모드에서 확인한 이름을 그대로 입력하면 됩니다.</span>
+          {validFrames.length > 0 && (
+            <div style={{ marginTop: 14, padding: '10px 14px', background: '#e8f0fe', borderRadius: 10, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: APPLE_BLUE, marginRight: 2 }}>선택 {validFrames.length}개</span>
+              {validFrames.map((f, i) => (
+                <span key={i} style={{ fontSize: 12, padding: '2px 10px', borderRadius: 20, background: '#fff', color: TEXT_PRIMARY, fontFamily: 'monospace', border: `1px solid rgba(0,113,227,0.2)` }}>{f}</span>
+              ))}
+            </div>
           )}
         </div>
 
-        {/* Layer name quick-select chips (scan mode only) */}
-        {scanMode && scanLayerOptions.length > 0 && (
-          <div style={{ marginBottom: 14, padding: '12px 14px', background: '#f8faff', border: '1px solid #e0e7ff', borderRadius: 6 }}>
-            <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: 8 }}>스캔된 레이어 — 클릭하면 해당 컬럼에 자동 입력</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-              {(['main', 'sub', 'cta'] as const).map((col) => {
-                const label = col === 'main' ? 'Main 텍스트' : col === 'sub' ? 'Sub 텍스트' : 'CTA'
-                const current = col === 'main' ? layerMain : col === 'sub' ? layerSub : layerCta
-                const setter = col === 'main' ? setLayerMain : col === 'sub' ? setLayerSub : setLayerCta
-                return (
-                  <div key={col}>
-                    <div style={{ fontSize: 10, color: '#888', marginBottom: 4 }}>{label}</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {scanLayerOptions.map((layer, i) => (
-                        <button
-                          key={i}
-                          onClick={() => {
-                            setter(layer)
-                            const nm = col === 'main' ? layer : layerMain
-                            const ns = col === 'sub' ? layer : layerSub
-                            const nc = col === 'cta' ? layer : layerCta
-                            buildJson(textRows, campaign, validFrames, autoImages, nm, ns, nc)
-                          }}
-                          style={{
-                            padding: '2px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'monospace',
-                            border: current === layer ? '2px solid #6366f1' : '1px solid #ddd',
-                            background: current === layer ? '#e0e7ff' : '#fff',
-                            color: current === layer ? '#3730a3' : '#555',
-                            fontWeight: current === layer ? 700 : 400,
-                          }}
-                        >
-                          {layer}
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => {
-                          setter('')
-                          const nm = col === 'main' ? '' : layerMain
-                          const ns = col === 'sub' ? '' : layerSub
-                          const nc = col === 'cta' ? '' : layerCta
-                          buildJson(textRows, campaign, validFrames, autoImages, nm, ns, nc)
-                        }}
-                        style={{
-                          padding: '2px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
-                          border: current === '' ? '2px solid #e11d48' : '1px solid #fecdd3',
-                          background: current === '' ? '#ffe4e6' : '#fff',
-                          color: '#e11d48',
-                        }}
-                      >
-                        없음
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
+        {/* Section 3 — 이미지 설정 */}
+        <div style={card}>
+          <SectionLabel num="03" title="이미지 설정" desc="업로드한 이미지를 thumb 레이어에 자동 매핑합니다." />
+          <div
+            onClick={() => { const next = !autoImages; setAutoImages(next); buildJson(textRows, campaign, validFrames, next) }}
+            style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', padding: '14px 16px', borderRadius: 12, background: APPLE_GRAY, border: BORDER }}
+          >
+            <div style={{ position: 'relative', width: 44, height: 26, flexShrink: 0 }}>
+              <div style={{ width: 44, height: 26, borderRadius: 13, background: autoImages ? APPLE_BLUE : '#c7c7cc', transition: 'background 0.25s' }} />
+              <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: autoImages ? 20 : 2, transition: 'left 0.25s', boxShadow: '0 1px 4px rgba(0,0,0,0.25)' }} />
             </div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: TEXT_PRIMARY }}>이미지 자동 매핑 (auto_images)</div>
+              <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 2 }}>Figma 플러그인에서 업로드한 이미지를 thumb 레이어 순서대로 자동 매핑</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 4 — 텍스트 변형 */}
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+            <div>
+              <SectionLabel num="04" title="텍스트 변형" desc={undefined} />
+              <div style={{ fontSize: 14, color: TEXT_SECONDARY, marginTop: 2 }}>
+                {validFrames.length}개 프레임 × {textRows.length}개 버전 =&nbsp;
+                <span style={{ color: APPLE_BLUE, fontWeight: 700 }}>총 {totalCount}개 소재</span>
+              </div>
+            </div>
+            <button onClick={addRow} style={{ ...appleBtn, background: APPLE_BLUE, color: '#fff', fontSize: 13, padding: '8px 18px' }}>
+              + 버전 추가
+            </button>
+          </div>
+
+          {/* Layer header hint */}
+          <div style={{ marginBottom: 12, padding: '10px 14px', background: '#fffbeb', borderRadius: 10, border: '1px solid #fde68a', fontSize: 13, color: '#78350f' }}>
+            아래 컬럼 헤더(파란 입력란)를 실제 Figma 레이어명으로 수정하세요.
+          </div>
+
+          {/* Scan layer quick-select */}
+          {scanMode && scanLayerOptions.length > 0 && (
+            <div style={{ marginBottom: 16, padding: '14px 16px', background: APPLE_GRAY, borderRadius: 12, border: BORDER }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: TEXT_SECONDARY, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>스캔된 레이어 선택</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                {(['main', 'sub', 'cta'] as const).map((col) => {
+                  const label = col === 'main' ? 'Main' : col === 'sub' ? 'Sub' : 'CTA'
+                  const current = col === 'main' ? layerMain : col === 'sub' ? layerSub : layerCta
+                  const setter = col === 'main' ? setLayerMain : col === 'sub' ? setLayerSub : setLayerCta
+                  return (
+                    <div key={col}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: TEXT_SECONDARY, marginBottom: 6 }}>{label}</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {scanLayerOptions.map((layer, i) => (
+                          <button key={i} onClick={() => {
+                            setter(layer)
+                            buildJson(textRows, campaign, validFrames, autoImages,
+                              col === 'main' ? layer : layerMain,
+                              col === 'sub' ? layer : layerSub,
+                              col === 'cta' ? layer : layerCta)
+                          }} style={{
+                            padding: '3px 10px', borderRadius: 20, fontSize: 12, cursor: 'pointer', fontFamily: 'monospace',
+                            border: current === layer ? `2px solid ${APPLE_BLUE}` : BORDER,
+                            background: current === layer ? APPLE_BLUE : '#fff',
+                            color: current === layer ? '#fff' : TEXT_PRIMARY,
+                            fontWeight: current === layer ? 600 : 400,
+                          }}>{layer}</button>
+                        ))}
+                        <button onClick={() => {
+                          setter('')
+                          buildJson(textRows, campaign, validFrames, autoImages,
+                            col === 'main' ? '' : layerMain,
+                            col === 'sub' ? '' : layerSub,
+                            col === 'cta' ? '' : layerCta)
+                        }} style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, cursor: 'pointer', border: current === '' ? '2px solid #e34850' : '1px solid #ffd0d3', background: current === '' ? '#e34850' : '#fff', color: current === '' ? '#fff' : '#e34850' }}>없음</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Table */}
+          <div style={{ overflowX: 'auto', borderRadius: 12, border: BORDER, background: '#fff' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: BORDER }}>
+                  <th style={{ ...th, width: 80 }}>버전</th>
+                  <th style={th}>
+                    <div style={{ fontSize: 10, color: TEXT_SECONDARY, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>레이어명 수정 가능</div>
+                    <input value={layerMain} onChange={e => { setLayerMain(e.target.value); buildJson(textRows, campaign, validFrames, autoImages, e.target.value, layerSub, layerCta) }} style={layerInput} placeholder="main-text" />
+                  </th>
+                  <th style={th}>
+                    <div style={{ fontSize: 10, color: TEXT_SECONDARY, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>레이어명 수정 가능</div>
+                    <input value={layerSub} onChange={e => { setLayerSub(e.target.value); buildJson(textRows, campaign, validFrames, autoImages, layerMain, e.target.value, layerCta) }} style={layerInput} placeholder="sub-text" />
+                  </th>
+                  <th style={th}>
+                    <div style={{ fontSize: 10, color: TEXT_SECONDARY, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>레이어명 수정 가능</div>
+                    <input value={layerCta} onChange={e => { setLayerCta(e.target.value); buildJson(textRows, campaign, validFrames, autoImages, layerMain, layerSub, e.target.value) }} style={{ ...layerInput, width: 100 }} placeholder="cta-text" />
+                  </th>
+                  <th style={{ ...th, minWidth: 220 }}>배경</th>
+                  <th style={{ ...th, width: 40 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {textRows.map((row, i) => (
+                  <tr key={i} style={{ borderBottom: i < textRows.length - 1 ? BORDER : 'none', transition: 'background 0.1s' }}>
+                    <td style={td}>
+                      <input style={{ ...cellIn, fontWeight: 700, color: APPLE_BLUE, width: 68 }} value={row.label} onChange={e => handleRowChange(i, 'label', e.target.value)} />
+                    </td>
+                    <td style={td}><input style={cellIn} value={row.mainText} onChange={e => handleRowChange(i, 'mainText', e.target.value)} placeholder={layerMain || '(비활성)'} disabled={!layerMain} /></td>
+                    <td style={td}><input style={cellIn} value={row.subText} onChange={e => handleRowChange(i, 'subText', e.target.value)} placeholder={layerSub || '(비활성)'} disabled={!layerSub} /></td>
+                    <td style={td}><input style={{ ...cellIn, width: 110 }} value={row.ctaText} onChange={e => handleRowChange(i, 'ctaText', e.target.value)} placeholder={layerCta || '(비활성)'} disabled={!layerCta} /></td>
+                    <td style={td}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {/* 미리보기 + 토글 */}
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <div style={{
+                            width: 28, height: 28, borderRadius: 6, flexShrink: 0, border: BORDER,
+                            background: row.bgType === 'gradient' ? `linear-gradient(${row.gradAngle}deg, ${row.gradColor1}, ${row.gradColor2})` : row.bgColor,
+                          }} />
+                          <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: BORDER }}>
+                            <button onClick={() => handleRowChange(i, 'bgType', 'solid')} style={{ padding: '4px 10px', fontSize: 12, border: 'none', cursor: 'pointer', background: row.bgType === 'solid' ? TEXT_PRIMARY : '#fff', color: row.bgType === 'solid' ? '#fff' : TEXT_SECONDARY }}>단색</button>
+                            <button onClick={() => handleRowChange(i, 'bgType', 'gradient')} style={{ padding: '4px 10px', fontSize: 12, border: 'none', cursor: 'pointer', background: row.bgType === 'gradient' ? TEXT_PRIMARY : '#fff', color: row.bgType === 'gradient' ? '#fff' : TEXT_SECONDARY, borderLeft: BORDER }}>그라데이션</button>
+                          </div>
+                        </div>
+                        {/* 단색 */}
+                        {row.bgType === 'solid' && (
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <input type="color" value={row.bgColor} onChange={e => handleRowChange(i, 'bgColor', e.target.value)} style={{ width: 28, height: 28, border: 'none', cursor: 'pointer', borderRadius: 6, padding: 0 }} />
+                            <input style={{ ...cellIn, width: 80 }} value={row.bgColor} onChange={e => handleRowChange(i, 'bgColor', e.target.value)} />
+                          </div>
+                        )}
+                        {/* 그라데이션 */}
+                        {row.bgType === 'gradient' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <input type="color" value={row.gradColor1} onChange={e => handleRowChange(i, 'gradColor1', e.target.value)} style={{ width: 28, height: 28, border: 'none', cursor: 'pointer', borderRadius: 6, padding: 0 }} />
+                              <input style={{ ...cellIn, width: 72 }} value={row.gradColor1} onChange={e => handleRowChange(i, 'gradColor1', e.target.value)} />
+                              <span style={{ color: '#c7c7cc', fontSize: 14 }}>→</span>
+                              <input type="color" value={row.gradColor2} onChange={e => handleRowChange(i, 'gradColor2', e.target.value)} style={{ width: 28, height: 28, border: 'none', cursor: 'pointer', borderRadius: 6, padding: 0 }} />
+                              <input style={{ ...cellIn, width: 72 }} value={row.gradColor2} onChange={e => handleRowChange(i, 'gradColor2', e.target.value)} />
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 11, color: TEXT_SECONDARY, whiteSpace: 'nowrap' }}>각도</span>
+                              <input type="range" min={0} max={360} value={row.gradAngle} onChange={e => handleRowChange(i, 'gradAngle', Number(e.target.value))} style={{ flex: 1, accentColor: APPLE_BLUE }} />
+                              <span style={{ fontSize: 11, color: TEXT_PRIMARY, minWidth: 34, textAlign: 'right' }}>{row.gradAngle}°</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      <button onClick={() => removeRow(i)} disabled={textRows.length <= 1} style={{ background: 'none', border: 'none', color: '#c7c7cc', cursor: textRows.length <= 1 ? 'default' : 'pointer', fontSize: 20, lineHeight: 1, padding: '0 4px' }}>×</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Section 5 — JSON 출력 */}
+        {jsonOutput && (
+          <div style={card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <SectionLabel num="05" title="JSON 출력" desc={undefined} />
+                <div style={{ fontSize: 14, color: TEXT_SECONDARY }}>총 <span style={{ color: APPLE_BLUE, fontWeight: 700 }}>{totalCount}개</span> 소재</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={handleSave} disabled={saving} style={{ ...appleBtn, background: saving ? '#c7c7cc' : APPLE_GRAY, color: TEXT_PRIMARY, border: BORDER, fontSize: 14, padding: '10px 20px' }}>
+                  {saving ? '저장 중...' : '저장'}
+                </button>
+                <button onClick={handleDownload} style={{ ...appleBtn, background: APPLE_BLUE, color: '#fff', fontSize: 14, padding: '10px 20px' }}>
+                  JSON 다운로드
+                </button>
+              </div>
+            </div>
+            {error && <div style={{ marginBottom: 12, padding: '10px 14px', background: '#fff2f2', borderRadius: 10, fontSize: 13, color: '#e34850' }}>{error}</div>}
+            <pre style={{ background: '#1c1c1e', color: '#d4d4d4', padding: 20, borderRadius: 12, overflow: 'auto', fontSize: 12, maxHeight: 420, margin: 0, lineHeight: 1.6, fontFamily: '"SF Mono", "Fira Code", monospace' }}>
+              {jsonOutput}
+            </pre>
           </div>
         )}
 
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: '#f5f5f5' }}>
-                <th style={thStyle}>버전</th>
-                <th style={thStyle}>
-                  <input
-                    value={layerMain}
-                    onChange={e => { setLayerMain(e.target.value); buildJson(textRows, campaign, validFrames, autoImages, e.target.value, layerSub, layerCta) }}
-                    style={{ ...headerInput, width: 130 }}
-                    title="Figma 텍스트 레이어명"
-                  />
-                </th>
-                <th style={thStyle}>
-                  <input
-                    value={layerSub}
-                    onChange={e => { setLayerSub(e.target.value); buildJson(textRows, campaign, validFrames, autoImages, layerMain, e.target.value, layerCta) }}
-                    style={{ ...headerInput, width: 130 }}
-                    title="Figma 텍스트 레이어명"
-                  />
-                </th>
-                <th style={thStyle}>
-                  <input
-                    value={layerCta}
-                    onChange={e => { setLayerCta(e.target.value); buildJson(textRows, campaign, validFrames, autoImages, layerMain, layerSub, e.target.value) }}
-                    style={{ ...headerInput, width: 100 }}
-                    title="Figma 텍스트 레이어명"
-                  />
-                </th>
-                <th style={thStyle}>배경</th>
-                <th style={thStyle}></th>
-              </tr>
-              <tr style={{ background: '#fafafa', borderBottom: '1px solid #eee' }}>
-                <td colSpan={6} style={{ padding: '2px 12px', fontSize: 11, color: '#aaa' }}>
-                  {scanMode ? '↑ 위의 레이어 칩을 클릭하거나 헤더를 직접 수정' : '↑ 헤더 클릭해서 실제 Figma 레이어명으로 수정'}
-                </td>
-              </tr>
-            </thead>
-            <tbody>
-              {textRows.map((row, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={tdStyle}>
-                    <input style={{ ...cellInput, width: 70, fontWeight: 600 }} value={row.label} onChange={e => handleRowChange(i, 'label', e.target.value)} />
-                  </td>
-                  <td style={tdStyle}>
-                    <input style={cellInput} value={row.mainText} onChange={e => handleRowChange(i, 'mainText', e.target.value)} placeholder={layerMain || '(비활성)'} disabled={!layerMain} />
-                  </td>
-                  <td style={tdStyle}>
-                    <input style={cellInput} value={row.subText} onChange={e => handleRowChange(i, 'subText', e.target.value)} placeholder={layerSub || '(비활성)'} disabled={!layerSub} />
-                  </td>
-                  <td style={tdStyle}>
-                    <input style={{ ...cellInput, width: 100 }} value={row.ctaText} onChange={e => handleRowChange(i, 'ctaText', e.target.value)} placeholder={layerCta || '(비활성)'} disabled={!layerCta} />
-                  </td>
-                  <td style={tdStyle}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 200 }}>
-                      {/* 단색/그라데이션 토글 */}
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button
-                          onClick={() => { handleRowChange(i, 'bgType', 'solid'); }}
-                          style={{ padding: '2px 8px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', background: row.bgType === 'solid' ? '#18A0FB' : '#f0f0f0', color: row.bgType === 'solid' ? '#fff' : '#555' }}
-                        >단색</button>
-                        <button
-                          onClick={() => { handleRowChange(i, 'bgType', 'gradient'); }}
-                          style={{ padding: '2px 8px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', background: row.bgType === 'gradient' ? '#6366f1' : '#f0f0f0', color: row.bgType === 'gradient' ? '#fff' : '#555' }}
-                        >그라데이션</button>
-                        {/* 미리보기 */}
-                        <div style={{
-                          flex: 1, height: 22, borderRadius: 4, marginLeft: 4,
-                          background: row.bgType === 'gradient'
-                            ? `linear-gradient(${row.gradAngle}deg, ${row.gradColor1}, ${row.gradColor2})`
-                            : row.bgColor,
-                          border: '1px solid #ddd',
-                        }} />
-                      </div>
-
-                      {/* 단색 */}
-                      {row.bgType === 'solid' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <input type="color" value={row.bgColor} onChange={e => handleRowChange(i, 'bgColor', e.target.value)} style={{ width: 28, height: 24, border: 'none', cursor: 'pointer', borderRadius: 3 }} />
-                          <input style={{ ...cellInput, width: 76 }} value={row.bgColor} onChange={e => handleRowChange(i, 'bgColor', e.target.value)} />
-                        </div>
-                      )}
-
-                      {/* 그라데이션 */}
-                      {row.bgType === 'gradient' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <input type="color" value={row.gradColor1} onChange={e => handleRowChange(i, 'gradColor1', e.target.value)} style={{ width: 28, height: 24, border: 'none', cursor: 'pointer', borderRadius: 3 }} />
-                            <input style={{ ...cellInput, width: 70 }} value={row.gradColor1} onChange={e => handleRowChange(i, 'gradColor1', e.target.value)} />
-                            <span style={{ fontSize: 11, color: '#aaa' }}>→</span>
-                            <input type="color" value={row.gradColor2} onChange={e => handleRowChange(i, 'gradColor2', e.target.value)} style={{ width: 28, height: 24, border: 'none', cursor: 'pointer', borderRadius: 3 }} />
-                            <input style={{ ...cellInput, width: 70 }} value={row.gradColor2} onChange={e => handleRowChange(i, 'gradColor2', e.target.value)} />
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontSize: 11, color: '#888', whiteSpace: 'nowrap' }}>각도</span>
-                            <input
-                              type="range" min={0} max={360} value={row.gradAngle}
-                              onChange={e => handleRowChange(i, 'gradAngle', Number(e.target.value))}
-                              style={{ flex: 1 }}
-                            />
-                            <span style={{ fontSize: 11, color: '#555', minWidth: 30 }}>{row.gradAngle}°</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td style={tdStyle}>
-                    <button onClick={() => removeRow(i)} style={{ background: 'none', border: 'none', color: '#bbb', cursor: 'pointer', fontSize: 16 }} disabled={textRows.length <= 1}>✕</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* 5. JSON 출력 */}
-      {jsonOutput && (
-        <section style={sectionStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h2 style={{ ...sectionTitle, margin: 0 }}>5. JSON 출력 <span style={{ fontSize: 13, color: '#888', fontWeight: 400 }}>({totalCount}개 소재)</span></h2>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={handleSave} disabled={saving} style={{ padding: '8px 18px', background: saving ? '#ccc' : '#34a853', color: '#fff', border: 'none', borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13 }}>
-                {saving ? '저장 중...' : '저장'}
-              </button>
-              <button onClick={handleDownload} style={{ padding: '8px 18px', background: '#18A0FB', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
-                JSON 다운로드
-              </button>
-            </div>
+        {!jsonOutput && validFrames.length > 0 && textRows.some(r => r.mainText) && (
+          <div style={{ textAlign: 'center', padding: 24 }}>
+            <button onClick={() => buildJson(textRows, campaign)} style={{ ...appleBtn, background: APPLE_BLUE, color: '#fff', fontSize: 16, padding: '14px 40px' }}>
+              JSON 생성 — {totalCount}개 소재
+            </button>
           </div>
-          <pre style={{ background: '#1e1e1e', color: '#d4d4d4', padding: 16, borderRadius: 6, overflow: 'auto', fontSize: 12, maxHeight: 400, margin: 0 }}>
-            {jsonOutput}
-          </pre>
-        </section>
-      )}
+        )}
 
-      {!jsonOutput && validFrames.length > 0 && textRows.some(r => r.mainText) && (
-        <div style={{ textAlign: 'center', padding: 16 }}>
-          <button onClick={() => buildJson(textRows, campaign)} style={{ padding: '10px 32px', background: '#18A0FB', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
-            JSON 생성 ({totalCount}개 소재)
-          </button>
-        </div>
-      )}
+      </div>
     </div>
   )
 }
 
-const sectionStyle: React.CSSProperties = {
-  background: '#fff', borderRadius: 8, padding: 24, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+function SectionLabel({ num, title, desc }: { num: string; title: string; desc?: string }) {
+  return (
+    <div style={{ marginBottom: desc ? 16 : 0 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: desc ? 4 : 0 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#0071e3', letterSpacing: '0.5px' }}>{num}</span>
+        <h2 style={{ fontSize: 19, fontWeight: 700, color: '#1d1d1f', margin: 0, letterSpacing: '-0.3px' }}>{title}</h2>
+      </div>
+      {desc && <p style={{ fontSize: 14, color: '#6e6e73', margin: 0 }}>{desc}</p>}
+    </div>
+  )
 }
-const sectionTitle: React.CSSProperties = {
-  fontSize: 15, fontWeight: 600, marginBottom: 8, marginTop: 0,
+
+const card: React.CSSProperties = {
+  background: '#fff', borderRadius: 18, padding: 28, marginBottom: 16,
+  boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.06)',
 }
-const inputStyle: React.CSSProperties = {
-  padding: '8px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box',
+const appleBtn: React.CSSProperties = {
+  borderRadius: 980, border: 'none', cursor: 'pointer', fontWeight: 500,
+  fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', transition: 'opacity 0.15s',
+  padding: '8px 18px',
 }
-const chipStyle: React.CSSProperties = {
-  padding: '6px 16px', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 13, fontWeight: 500,
+const appleInput: React.CSSProperties = {
+  width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.12)',
+  fontSize: 15, color: '#1d1d1f', outline: 'none', boxSizing: 'border-box',
+  background: '#fff', fontFamily: '-apple-system, sans-serif',
 }
-const thStyle: React.CSSProperties = {
-  padding: '8px 12px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: '#555', whiteSpace: 'nowrap',
+const th: React.CSSProperties = {
+  padding: '12px 14px', textAlign: 'left', fontWeight: 600, fontSize: 12,
+  color: '#6e6e73', whiteSpace: 'nowrap', background: '#f5f5f7',
 }
-const tdStyle: React.CSSProperties = {
-  padding: '6px 8px', verticalAlign: 'middle',
+const td: React.CSSProperties = {
+  padding: '10px 14px', verticalAlign: 'middle',
 }
-const cellInput: React.CSSProperties = {
-  padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12, width: '100%', minWidth: 100, boxSizing: 'border-box',
+const cellIn: React.CSSProperties = {
+  padding: '7px 10px', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8,
+  fontSize: 13, width: '100%', minWidth: 100, boxSizing: 'border-box',
+  background: '#f5f5f7', color: '#1d1d1f', outline: 'none',
 }
-const hintStyle: React.CSSProperties = {
-  fontSize: 11, color: '#999', lineHeight: 1.6, margin: '4px 0 0',
-}
-const headerInput: React.CSSProperties = {
-  padding: '3px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12,
-  fontWeight: 600, background: '#fff', outline: 'none', boxSizing: 'border-box',
+const layerInput: React.CSSProperties = {
+  padding: '5px 8px', border: '1.5px solid #0071e3', borderRadius: 6, fontSize: 12,
+  fontWeight: 600, background: '#e8f0fe', color: '#0071e3', outline: 'none',
+  boxSizing: 'border-box', width: 140, fontFamily: '"SF Mono", monospace',
 }
