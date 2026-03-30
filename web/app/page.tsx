@@ -49,6 +49,8 @@ export default function Home() {
   const [layerSub, setLayerSub] = useState('sub-text')
   const [layerCta, setLayerCta] = useState('cta-text')
 
+  const [showGuide, setShowGuide] = useState(false)
+
   // Scan mode state
   const [scanJson, setScanJson] = useState('')
   const [scanFrames, setScanFrames] = useState<ScanFrame[]>([])
@@ -321,6 +323,9 @@ export default function Home() {
           <div>
             <h2 style={{ ...sectionTitle, margin: 0 }}>2. Figma 템플릿 프레임 선택</h2>
             <p style={hintStyle}>스캔 결과를 붙여넣으면 프레임을 체크박스로 선택할 수 있습니다.</p>
+            <button onClick={() => setShowGuide(v => !v)} style={{ marginTop: 6, padding: '3px 10px', fontSize: 11, borderRadius: 4, border: '1px solid #d1d5db', background: showGuide ? '#f0f7ff' : '#fafafa', color: '#6366f1', cursor: 'pointer', fontWeight: 600 }}>
+              {showGuide ? '▲ 레이어 네이밍 가이드 닫기' : '▼ 레이어 네이밍 가이드 보기'}
+            </button>
           </div>
           {scanMode && (
             <button onClick={exitScanMode} style={{ ...chipStyle, background: '#fee2e2', color: '#c62828', fontSize: 12 }}>
@@ -328,6 +333,90 @@ export default function Home() {
             </button>
           )}
         </div>
+
+        {/* 레이어 네이밍 가이드 */}
+        {showGuide && (
+          <div style={{ marginBottom: 16, borderRadius: 8, border: '1px solid #e0e7ff', overflow: 'hidden', fontSize: 12 }}>
+            <div style={{ background: '#6366f1', color: '#fff', padding: '8px 14px', fontWeight: 700, fontSize: 13 }}>
+              Figma 레이어 네이밍 규칙
+            </div>
+            <div style={{ padding: '12px 14px', background: '#fafbff', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+              {/* 텍스트 */}
+              <div>
+                <div style={{ fontWeight: 700, color: '#374151', marginBottom: 4 }}>텍스트 레이어</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {[
+                    { name: 'headline-text', desc: '메인 헤드라인 (가장 크고 굵은 텍스트)', required: true },
+                    { name: 'sub-text', desc: '서브 카피 / 설명 텍스트', required: false },
+                    { name: 'cta-text', desc: 'CTA 버튼 텍스트', required: false },
+                  ].map(item => (
+                    <div key={item.name} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 10px', background: '#fff', borderRadius: 6, border: '1px solid #e5e7eb' }}>
+                      <code style={{ background: '#e0e7ff', color: '#3730a3', padding: '1px 6px', borderRadius: 3, fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>{item.name}</code>
+                      <span style={{ color: '#6b7280' }}>{item.desc}</span>
+                      {item.required && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#dc2626', background: '#fee2e2', padding: '1px 5px', borderRadius: 3, whiteSpace: 'nowrap', flexShrink: 0 }}>권장</span>}
+                    </div>
+                  ))}
+                </div>
+                <p style={{ color: '#9ca3af', fontSize: 11, marginTop: 6 }}>※ 레이어 이름이 다르면 웹 UI의 레이어명 헤더를 실제 이름으로 수정하세요.</p>
+              </div>
+
+              {/* 이미지 */}
+              <div>
+                <div style={{ fontWeight: 700, color: '#374151', marginBottom: 4 }}>이미지 레이어</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {[
+                    { name: 'thumb', desc: '메인 이미지 (RECTANGLE에 image fill)' },
+                    { name: 'screen', desc: '기기 화면 이미지 (모바일/데스크탑 목업용)' },
+                    { name: 'thumb1, thumb2...', desc: 'auto_images 사용 시 — 번호 순서대로 자동 매핑' },
+                  ].map(item => (
+                    <div key={item.name} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 10px', background: '#fff', borderRadius: 6, border: '1px solid #e5e7eb' }}>
+                      <code style={{ background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: 3, fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>{item.name}</code>
+                      <span style={{ color: '#6b7280' }}>{item.desc}</span>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ color: '#9ca3af', fontSize: 11, marginTop: 6 }}>※ 플러그인 스캔 결과의 <code style={{ background: '#f3f4f6', padding: '0 3px', borderRadius: 2 }}>imageLayers</code> 항목에서 실제 이름을 확인하세요.</p>
+              </div>
+
+              {/* 배경 */}
+              <div>
+                <div style={{ fontWeight: 700, color: '#374151', marginBottom: 4 }}>배경 레이어</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {[
+                    { name: 'bg', desc: '가장 일반적인 배경 도형 이름' },
+                    { name: 'BG', desc: '대문자 버전도 인식' },
+                    { name: 'background / Background', desc: '영문 전체 이름도 인식' },
+                    { name: 'bg-rectangle', desc: '기존 형식도 인식' },
+                  ].map(item => (
+                    <div key={item.name} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 10px', background: '#fff', borderRadius: 6, border: '1px solid #e5e7eb' }}>
+                      <code style={{ background: '#d1fae5', color: '#065f46', padding: '1px 6px', borderRadius: 3, fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>{item.name}</code>
+                      <span style={{ color: '#6b7280' }}>{item.desc}</span>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ color: '#9ca3af', fontSize: 11, marginTop: 6 }}>※ 배경 레이어가 없으면 프레임 자체 배경색을 변경합니다. 배경 레이어가 있다면 그 레이어 fill이 우선 변경됩니다.</p>
+              </div>
+
+              {/* 체크리스트 */}
+              <div style={{ padding: '10px 12px', background: '#fffbeb', borderRadius: 6, border: '1px solid #fde68a' }}>
+                <div style={{ fontWeight: 700, color: '#92400e', marginBottom: 6 }}>프레임 작성 전 체크리스트</div>
+                {[
+                  '헤드라인 텍스트 레이어 이름이 headline-text 인지 확인',
+                  '이미지 레이어가 RECTANGLE이고 이름이 thumb / screen 인지 확인',
+                  '배경 도형 레이어 이름이 bg / BG / background 중 하나인지 확인',
+                  '스캔 버튼으로 실제 레이어명을 확인하고 웹 UI 헤더와 일치시키기',
+                ].map((item, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 4, color: '#78350f', fontSize: 11 }}>
+                    <span style={{ color: '#f59e0b', flexShrink: 0 }}>✓</span>
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
+
+            </div>
+          </div>
+        )}
 
         {/* Scan paste area */}
         {!scanMode && (
